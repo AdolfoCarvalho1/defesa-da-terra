@@ -1,0 +1,20 @@
+const { chromium } = require('@playwright/test');
+(async()=>{
+  const b=await chromium.launch();
+  const p=await b.newPage();
+  await p.goto('file:///'+require('path').resolve('defesa-orbital-3.html').replace(/\\/g,'/'));
+  await p.waitForTimeout(800);
+  await p.click('#btn-start');
+  await p.waitForTimeout(1200);
+  console.log('before', await p.evaluate(()=> window.AudioSys.muted));
+  await p.evaluate(()=> window.AudioSys.ensure());
+  await p.waitForTimeout(200);
+  await p.click('#btn-mute');
+  await p.waitForTimeout(400);
+  console.log('after click', await p.evaluate(()=> window.AudioSys.muted), await p.locator('#btn-mute').textContent());
+  await p.keyboard.press('m');
+  await p.waitForTimeout(400);
+  console.log('after M', await p.evaluate(()=> window.AudioSys.muted));
+  await b.close();
+  console.log('mute test done');
+})();
