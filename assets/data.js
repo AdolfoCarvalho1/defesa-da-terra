@@ -8,10 +8,16 @@ var DO3 = (function () {
   const SAVE_KEY = 'defesa_orbital_v3';
   const TOWER_MAX_LVL = 50;
 
-  const PALETTE = {
+  // IDENTIDADE UNIFICADA: PALETTE deriva de TOKENS se existir (6-mãe fechada)
+  const _TOK = (typeof window!=='undefined' && (window.TOKENS || (window.DO3 && window.DO3.TOKENS))) ? (window.TOKENS || window.DO3.TOKENS).PALETTE : null;
+  const PALETTE = _TOK ? {
+    bg: _TOK.bg, bg2: _TOK.bg2, panel: _TOK.panel, text: _TOK.text,
+    muted: _TOK.muted, cyan: _TOK.cyan, red: _TOK.red, gold: _TOK.gold,
+    green: _TOK.green, orange: _TOK.orange, steel: _TOK.steel, acid: _TOK.acid, shieldBlue: _TOK.shieldBlue
+  } : {
     bg: '#050914', bg2: '#0a1128', panel: '#0d1526', text: '#e8eefc',
     muted: '#8fa3c4', cyan: '#38bdf8', red: '#f43f5e', gold: '#fbbf24',
-    green: '#34d399', orange: '#fb923c'
+    green: '#34d399', orange: '#fb923c', steel: '#e2e8f0', acid: '#a3e635', shieldBlue: '#60a5fa'
   };
 
   const TOWERS_DATA = [
@@ -259,7 +265,8 @@ var DO3 = (function () {
     wasp:     { hp: 45,  spd: 92,  gold: 9,   res: 2,  r: 8,  col: '#facc15', label: 'Vespa Cortadora', shape: 'dart', dmg: 1, flying: true },
     boss1:    { hp: 1800, spd: 24, gold: 160, res: 15, r: 20, col: '#f43f5e', label: 'Nave-Mãe Alfa', shape: 'boss', dmg: 5, isBoss: true, shield: 400 },
     boss2:    { hp: 3200, spd: 22, gold: 220, res: 25, r: 22, col: '#fb923c', label: 'Titan Hivemind Hélios', shape: 'boss', dmg: 6, isBoss: true, shield: 800 },
-    boss3:    { hp: 5000, spd: 20, gold: 300, res: 40, r: 24, col: '#22d3ee', label: 'Devorador de Mundos', shape: 'boss', dmg: 8, isBoss: true, shield: 1400 }
+    boss3:    { hp: 5000, spd: 20, gold: 300, res: 40, r: 24, col: '#22d3ee', label: 'Devorador de Mundos', shape: 'boss', dmg: 8, isBoss: true, shield: 1400 },
+    fleet:    { hp: 8000, spd: 18, gold: 500, res: 60, r: 28, col: '#a78bfa', label: 'FROTA SUPREMA HIVEMIND', shape: 'boss', dmg: 12, isBoss: true, shield: 2500, isFleet: true }
   };
   // ===== ULTRA: 100 variações procedurais (vida/vel/escudo/estilo) =====
   (function genVariants(){
@@ -300,9 +307,10 @@ var DO3 = (function () {
       const shieldAdd = base.shield ? Math.round((rnd()*0.6-0.2)*base.shield) : (rnd()<0.28 ? Math.round(rnd()*90+20) : 0);
       const rAdd = Math.round((rnd()-0.5)*4);
       const [h,s,l] = hexToHsl(base.col);
-      const nh = (h + (rnd()-0.5)*48 + 360)%360;
-      const ns = Math.max(0.45, Math.min(1, s + (rnd()-0.5)*0.25));
-      const nl = Math.max(0.42, Math.min(0.68, l + (rnd()-0.5)*0.16));
+      // IDENTIDADE UNIFICADA: variação contida dentro da família (max 18° hue, sat/light clamp suave)
+      const nh = (h + (rnd()-0.5)*18 + 360)%360;
+      const ns = Math.max(0.52, Math.min(0.92, s + (rnd()-0.5)*0.14));
+      const nl = Math.max(0.46, Math.min(0.62, l + (rnd()-0.5)*0.10));
       const nCol = hslToHex(nh, ns, nl);
       const suff = suffixes[variantCount % suffixes.length] + (variantCount>=suffixes.length ? ' '+(Math.floor(variantCount/suffixes.length)+1) : '');
       const newKey = baseKey + '_v' + (variantCount+2);
@@ -381,6 +389,68 @@ var DO3 = (function () {
         [[-1, 6], [2, 6], [2, 4], [7, 4], [7, 2], [11, 2], [11, 7], [15, 7], [15, 3], [19, 3], [19, 9], [21, 9]]
       ],
       waves: ['d18', 'r20 s14', 't5 d16 v8', 's26 r16', 'h6 d20 e8', 'p16 b14', 't6 h5 s22 v10', 'd24 r18 b14 e10', 'B1 t5 j2', 'p18 s26 v12', 'r24 b18 h6 e12', 'd26 t8 j2', 'B2 p20 v12', 's32 h7 e14', 'b22 r22 t7 v14', 'd28 p18 s16 j3', 'B2 h7 t8 e14', 'r28 b20 v16', 'd30 s28 p18 e16', 't10 h8 b18 j4', 'B3 r26 d22 v16', 's36 p22 e18', 'd34 r28 b20 t8 j4', 'B3 B3 h8 d30 v20']
+    },
+    {
+      id: 6, name: 'Nexus Pixel: Forja Orbital', sub: 'MAPA NOVO • Pixel Art Puro • 22 Ondas • Labirinto Longo', theme: 'neptune-frontier',
+      routes: [
+        [[-1, 6], [4, 6], [4, 2], [8, 2], [8, 10], [12, 10], [12, 2], [16, 2], [16, 10], [12, 10], [12, 6], [20, 6], [20, 2], [21, 2]],
+        [[-1, 10], [6, 10], [6, 4], [10, 4], [10, 8], [14, 8], [14, 4], [18, 4], [18, 10], [14, 10], [14, 6], [20, 6], [20, 10], [21, 10]],
+        [[-1, 2], [2, 2], [2, 6], [6, 6], [6, 2], [10, 2], [10, 6], [14, 6], [14, 2], [18, 2], [18, 10], [10, 10], [10, 6], [21, 6]]
+      ],
+      waves: ['d10 r6', 's16 r10', 't3 d10 v4', 'h4 s14 e6', 'p12 b8 v6', 'd18 t4 s10 j1', 'b14 r16 v8', 's22 h4 p10 v8', 't6 h4 d16 e10', 'r20 b14 v10', 'd22 s18 p12 e12', 'B1 h6 t6 v10', 's26 b18 v12', 'd26 p16 t6 j2', 'B2 r22 v12', 'h8 b20 r20 t8 j2', 'd30 s28 p16 e14', 'B3 B3 h8 v16', 'b16 r18 v10', 't8 h6 d20 e12', 'B2 B2 h10 v14', 'B3 B3 B3 h12 v18']
+    },
+    // ===== SISTEMA SOLAR TEMÁTICO — 8 PLANETAS + 6 LUAS MAIORES =====
+    {
+      id: 7, name: 'Mercúrio: Fornalha Solar', sub: '☿ Planeta mais próximo do Sol • 10 Ondas • Calor extremo', theme: 'jupiter-orbit',
+      routes: [[[-1,6],[6,6],[6,2],[12,2],[12,10],[18,10],[18,6],[21,6]], [[-1,10],[4,10],[4,6],[10,6],[10,2],[16,2],[16,10],[21,10]]],
+      waves: ['d8','r10 s6','t2 d8 v2','s14 h2','p6 b4','d12 t2 v4','b8 r8','B1 d8 v4','d14 p8 s10','B1 B1 h4 v6']
+    },
+    {
+      id: 8, name: 'Vênus: Véu Ácido', sub: '♀ Inferno ácido • 12 Ondas • Nuvens corrosivas', theme: 'jupiter-orbit',
+      routes: [[[-1,2],[5,2],[5,8],[2,8],[2,11],[9,11],[9,4],[14,4],[14,11],[21,11]], [[-1,8],[7,8],[7,2],[13,2],[13,8],[21,8]]],
+      waves: ['d10','r12 s8','t2 d10 e3','s16 h3','p8 b6 v4','d14 t3 v6','b10 r10 v6','B1 d10 v6','d16 p10 s12','B1 B1 h4','p12 t4 b8','B2 d12 v8']
+    },
+    {
+      id: 9, name: 'Marte: Deserto Vermelho', sub: '♂ Planeta vermelho • 14 Ondas • Tempestades de areia', theme: 'asteroid-belt',
+      routes: [[[-1,6],[5,6],[5,2],[9,2],[9,8],[13,8],[13,2],[17,2],[17,6],[21,6]], [[-1,10],[7,10],[7,4],[11,4],[11,10],[15,10],[15,6],[21,6]]],
+      waves: ['d12','r14 s8','t3 d12 v4','s18 h3','p10 b8','t4 h4 s14 v6','b12 r12 v8','B1 t3 v6','d18 p10 s14','B1 B1 h5','r18 b14 v10','B2 d16 v10','s22 h6 p12','B2 B1 h6 v10']
+    },
+    {
+      id: 10, name: 'Lua: Mar da Tranquilidade', sub: '☾ Lua da Terra • 10 Ondas • Crateras', theme: 'asteroid-belt',
+      routes: [[[-1,6],[3,6],[3,2],[7,2],[7,10],[11,10],[11,2],[15,2],[15,6],[21,6]]],
+      waves: ['d8','s12 r8','t2 d8','s14 p4','b6 r8 v4','B1 d10','d14 s10 p4','B1 B1 h3','d16 p8 v6','B2 d14 v8']
+    },
+    {
+      id: 11, name: 'Europa: Oceano Congelado', sub: 'Lua de Júpiter • 12 Ondas • Gelo rachado', theme: 'neptune-frontier',
+      routes: [[[-1,2],[4,2],[4,6],[8,6],[8,2],[12,2],[12,6],[16,6],[16,2],[21,2]], [[-1,10],[6,10],[6,2],[10,2],[10,6],[14,6],[14,10],[21,10]]],
+      waves: ['d10','r12 s6','t2 d10','s16 h3 e4','p8 b6','t4 s12 v6','b10 r12 v6','B1 d12 v6','d16 p10 s10','B1 B1 h5','h6 t4 b10','B2 d14 v8']
+    },
+    {
+      id: 12, name: 'Titã: Lagos de Metano', sub: 'Lua de Saturno • 14 Ondas • Névoa laranja', theme: 'saturn-rings',
+      routes: [[[-1,6],[5,6],[5,2],[9,2],[9,8],[13,8],[13,2],[17,2],[17,6],[21,6]], [[-1,10],[4,10],[4,4],[8,4],[8,10],[12,10],[12,6],[16,6],[16,10],[21,10]]],
+      waves: ['d12','r14 s8','t3 d10 v4','s16 h4','p10 b8 v4','t4 h4 s14','B1 t4 v6','b12 r14 v8','d18 p12 s12','B1 B1 h5','r20 b14 v10','B2 d18 v10','s24 h6 p12','B2 B1 h6 v12']
+    },
+    {
+      id: 13, name: 'Urano: Gigante de Gelo', sub: '⛢ Inclinação extrema • 16 Ondas • Anéis finos', theme: 'neptune-frontier',
+      routes: [[[-1,2],[6,2],[6,8],[2,8],[2,11],[10,11],[10,4],[15,4],[15,11],[21,11]], [[-1,10],[8,10],[8,4],[12,4],[12,11],[21,11]]],
+      waves: ['d14','r16 s8','t3 d12 v4','s20 h3 e6','p12 b10','t5 h5 s16 v6','b14 r14 v8','B1 t4 v8','d20 p12 s14','B1 B1 h6','r22 b16 v10','B2 d18 v12','s26 h6 p14','B2 B1 h8 v12','b16 r18 v12','B3 h8 v16']
+    },
+    {
+      id: 14, name: 'TRITÃO: Última Lua', sub: 'Lua de Netuno • 12 Ondas • Gêiseres', theme: 'neptune-frontier',
+      routes: [[[-1,6],[5,6],[5,2],[9,2],[9,8],[13,8],[13,2],[17,2],[17,8],[21,8]]],
+      waves: ['d10','r12 s8','t2 d10 v4','s16 h3','p10 b8','t4 s14 v6','b12 r12','B1 t4 v6','d18 p10 s12','B1 B1 h5','r22 b14','B2 d16 v10']
+    },
+    // ===== BOSS SUPREMO — FROTA GIGANTE =====
+    {
+      id: 15, name: '⚠ FROTA SUPREMA HIVEMIND: Sistema Solar', sub: '★ CHEFE FINAL • Todo o Sistema Solar de fundo • Frota gigante', theme: 'earth-orbit',
+      routes: [
+        [[-1,1],[4,1],[4,6],[8,6],[8,1],[12,1],[12,6],[16,6],[16,1],[21,1]],
+        [[-1,6],[4,6],[4,11],[8,11],[8,6],[12,6],[12,11],[16,11],[16,6],[21,6]],
+        [[-1,11],[6,11],[6,6],[10,6],[10,11],[14,11],[14,6],[18,6],[18,11],[21,11]]
+      ],
+      waves: [
+        'd20 r20 s20','t8 h8 p16 b16 e16 v16 j2 w10','B1 B1 h8 p16','s30 r30 t10','B2 B2 h10 p18','d30 s30 p20 e18','B1 B2 B3 h10','r30 b22 t10 w12','B3 B3 h12','s36 p24 e20 j4 w14','B1 B2 B3 B3 h14 p22','d40 r40 s40 t12','B3 B3 B3 h16 e22 j6','B1 B2 B3 B3 B3 h18 p26','B3 B3 B3 B3 h20 e24 j8 w16'
+      ]
     }
   ];
 
@@ -679,6 +749,126 @@ var DO3 = (function () {
     dmgPerStack: 0.015  // +1.5% dmg por stack (visual)
   };
 
+// ===== v3 PIXEL: TIERS + MERGE + PADRÕES DE TIRO + SUPERS AUTOMÁTICOS + FÁBRICA + LÓGICA TÁTICA =====
+const MERGE_PARTS = { 1: 20, 2: 40, 3: 80, 4: 160 }; // peças ⚙ p/ fundir tier N → N+1
+const TIER_NAMES = ['T1', 'T2', 'T3', 'T4', 'T5'];
+function getTier(level) { return Math.min(5, Math.floor(((level || 1) - 1) / 10) + 1); }
+const TIER_STATS = [
+  null,
+  { dmg: 1,    rate: 1,    rng: 1,     parts: 0 },
+  { dmg: 2.2,  rate: 1.15, rng: 1.10,  parts: 20 },
+  { dmg: 4.8,  rate: 1.30, rng: 1.21,  parts: 40 },
+  { dmg: 10,   rate: 1.50, rng: 1.331, parts: 80 },
+  { dmg: 22,   rate: 1.70, rng: 1.464, parts: 160 }
+];
+// Fase 3 — variações de tiro por tier (consumido por fireTower)
+const SHOT_PATTERNS = {
+  cannon:  { multi: [1, 2, 3, 4, 5] },                                  // leque largo
+  gatling: { burst: [2, 3, 4, 5, 6] },                                  // rajada de tracantes
+  laser:   { width: [1, 1.9, 1.9, 2.6, 2.6], sweep: [0, 0, 1, 2, 3] }, // feixe largo/prismas/varredor
+  missile: { salvo: [1, 2, 3, 4, 5], mirv: [false, false, false, false, true] },
+  cryo:    { pulses: [1, 2, 3, 4, 5] },                                 // anéis glaciais
+  tesla:   { chain: [4, 6, 8, 10, 12] },
+  sniper:  { targets: [1, 1, 1, 2, 3], tracer: [false, true, true, true, true] },
+  venom:   { rngMul: [1, 1, 1.15, 1.35, 1.6], stacks: [1, 1, 1.5, 1.75, 2] },
+  amp:     { ring: [1, 1.15, 1.3, 1.45, 1.6] },
+  rail:    { beams: [1, 2, 3, 1, 1], full: [false, false, false, true, true], star: [false, false, false, false, true] }
+};
+// Fase 4 — super automático por tipo (carga = res dos abates daquele tipo)
+const SUPERS_AUTO = {
+  cannon:  { key: 'cannon',  name: 'Barragem Orbital',    desc: '20 obuses caem na maior concentração de inimigos.', col: '#e2e8f0' },
+  gatling: { key: 'gatling', name: 'Tornado de Chumbo',   desc: '360° por 3s acertando tudo em alcance dobrado.', col: '#fbbf24' },
+  laser:   { key: 'laser',   name: 'Prisma Solar',        desc: 'Feixe varre a rota inteira por 2.5s.', col: '#f43f5e' },
+  missile: { key: 'missile', name: 'Enxame MIRV',         desc: '16 mísseis nos alvos mais caros.', col: '#fb923c' },
+  cryo:    { key: 'cryo',    name: 'Era Glacial',         desc: 'Congela TODOS os inimigos por 3s.', col: '#38bdf8' },
+  tesla:   { key: 'tesla',   name: 'Tempestade Final',    desc: '12 relâmpagos em cadeia global.', col: '#34d399' },
+  sniper:  { key: 'sniper',  name: 'Sentença',            desc: 'Executa os 3 inimigos de menor HP na tela.', col: '#67e8f9' },
+  venom:   { key: 'venom',   name: 'Maré Nanopraga',      desc: 'Envenena todos os inimigos em tela por 8s.', col: '#a3e635' },
+  amp:     { key: 'amp',     name: 'Sobrecarga Total',    desc: 'Todas as torres +100% dano por 6s (anel dourado).', col: '#fde047' },
+  rail:    { key: 'rail',    name: 'Lança Estelar',       desc: '3 linhas perfurantes cruzam o mapa.', col: '#ffffff' }
+};
+function superThreshold(tier) { return Math.max(12, 30 - (tier || 1) * 3); }
+
+// Fase 5 — Fábrica Orbital (produz peças ⚙ e créditos por onda completa)
+const FACTORY_DATA = {
+  id: 'factory', name: 'Fábrica Orbital', icon: '⚙', color: '#34d399', kind: 'factory',
+  cost: 120, maxLevel: 5,
+  desc: 'Prédio industrial: produz PEÇAS ⚙ e créditos a cada onda completa.',
+  upgradePartsCost: lvl => 15 * lvl,
+  upgradeCreditCost: lvl => Math.round(90 * Math.pow(1.8, lvl)),
+  partsPerWave: lvl => 10 * lvl,
+  creditsPerWave: lvl => 18 * lvl
+};
+// Laboratório Hivemind: paga peças p/ aumentar HP dos inimigos na run (mais ouro)
+const HIVEMIND = {
+  hpAdd: 0.12, goldAdd: 0.08,
+  cost: lvl => Math.round(15 * Math.pow(1.5, lvl))
+};
+
+// Fase 6 — lógica tática desbloqueada por tier (acumulativa), 10 torres × T2-T5
+const TIER_LOGIC = {
+  cannon: {
+    2: { name: 'Concussão', desc: 'Impactos explodem em área pequena e reduzem 20% da velocidade por 1.5s.', eff: { concuss: true } },
+    3: { name: 'Ogiva Perfurante', desc: 'Tiros ignoram 4 pontos de armadura.', eff: { armorPierce: 4 } },
+    4: { name: 'Ricochete', desc: 'Projéteis ricocheteiam em +1 alvo próximo após o impacto.', eff: { ricochet: 1 } },
+    5: { name: 'Dente de Ferro', desc: '+1% dano por abate desta nave (cap +50%).', eff: { killDmg: 0.01, killCap: 0.5 } }
+  },
+  gatling: {
+    2: { name: 'Munição Incendiária', desc: 'Tracantes incendeiam: 1s de queimadura.', eff: { burn: 1 } },
+    3: { name: 'Balística Vibratória', desc: '12% de chance de atordoar 0.25s por acerto.', eff: { stunChance: 0.12, stunDur: 0.25 } },
+    4: { name: 'Canos Duplos Reforçados', desc: 'Projéteis perfuram +2 inimigos.', eff: { pierce: 2 } },
+    5: { name: 'Frenesi de Combate', desc: 'Até +30% cadência conforme o combo atual.', eff: { comboRate: 0.3 } }
+  },
+  laser: {
+    2: { name: 'Foco Térmico', desc: '+25% dano contra alvos em chamas.', eff: { vsBurn: 1.25 } },
+    3: { name: 'Prisma Automático', desc: 'O feixe ganha +1 alvo varrido.', eff: { sweepAdd: 1 } },
+    4: { name: 'Fóton Fásico', desc: '50% do dano atravessa escudos diretamente.', eff: { shieldPhase: 0.5 } },
+    5: { name: 'Derretimento', desc: 'O feixe corrói 1 de armadura por segundo do alvo.', eff: { meltArmor: 1 } }
+  },
+  missile: {
+    2: { name: 'Rastro de Fogo', desc: 'Explosões deixam fogo residual (queima 2s).', eff: { burn: 2 } },
+    3: { name: 'Fragmentação', desc: 'Ogivas soltam +1 fragmento ao explodir.', eff: { fragAdd: 1 } },
+    4: { name: 'Mira Dupla', desc: 'Sempre alcança voadores.', eff: { hitAir: true } },
+    5: { name: 'MIRV', desc: 'Cada ogiva se subdivide em 3 submunições no impacto.', eff: { mirv: 3 } }
+  },
+  cryo: {
+    2: { name: 'Gelo Profundo', desc: '15% de chance de congelar por 0.8s.', eff: { freezeChance: 0.15, freezeDur: 0.8 } },
+    3: { name: 'Quebra Total', desc: 'Inimigos lentos/congelados recebem +25% dano.', eff: { chillVuln: 0.25 } },
+    4: { name: 'Aura de Frio', desc: 'Reduz 15% a velocidade num raio fixo, sem gastar tiro.', eff: { coldAura: 0.15 } },
+    5: { name: 'Congelamento Absoluto', desc: 'Afeta até chefes (50% de eficácia).', eff: { bossFreeze: 0.5 } }
+  },
+  tesla: {
+    2: { name: 'Ionização', desc: 'Alvos atingidos ficam 12% mais lentos por 1.5s.', eff: { ionSlow: 0.12 } },
+    3: { name: 'Condensadores Extras', desc: '+2 saltos de cadeia.', eff: { chainAdd: 2 } },
+    4: { name: 'Sobrecarga Magnética', desc: '+60% dano contra escudos.', eff: { vsShield: 1.6 } },
+    5: { name: 'Campo Global', desc: 'A cadeia salta por qualquer distância.', eff: { globalChain: true } }
+  },
+  sniper: {
+    2: { name: 'Marcador Leve', desc: 'Alvo marcado por 1.5s recebe +15% dano geral.', eff: { markDur: 1.5, markMul: 1.15 } },
+    3: { name: 'Munição AP', desc: 'Ignora toda a armadura do alvo.', eff: { ignoreArmor: true } },
+    4: { name: 'Ótica Crítica', desc: '+15% de chance de crítico.', eff: { critAdd: 0.15 } },
+    5: { name: 'Sentença Ampliada', desc: 'Executa alvos abaixo de 25% de HP.', eff: { execAdd: 0.25 } }
+  },
+  venom: {
+    2: { name: 'Corrosão', desc: 'Cada aplicação corrói 1 de armadura (acumula).', eff: { corrode: 1 } },
+    3: { name: 'Toxina Contagiosa', desc: 'Morto envenenado espalha a toxina (vira base).', eff: { plagueBase: true } },
+    4: { name: 'Necrose', desc: 'Veneno causa +0.6%/s da vida máxima do alvo.', eff: { pctPoison: 0.006 } },
+    5: { name: 'Detonação Esporulante', desc: 'Morte envenenada explode numa nuvem tóxica.', eff: { deathCloud: true } }
+  },
+  amp: {
+    2: { name: 'Antena Estendida', desc: 'Anel de buff 20% maior.', eff: { ringMul: 1.2 } },
+    3: { name: 'Metronomo', desc: 'Vizinhas ganham +10% cadência extra.', eff: { rateAdd: 0.1 } },
+    4: { name: 'Ressonância', desc: 'Vizinhas ganham +10% dano extra.', eff: { dmgAdd: 0.1 } },
+    5: { name: 'Hivemind', desc: 'Vizinhas ganham +5% de chance crítica.', eff: { critAdd: 0.05 } }
+  },
+  rail: {
+    2: { name: 'Trilho Ressonante', desc: '+15% dano contra blindados.', eff: { vsArmor: 1.15 } },
+    3: { name: 'Choque Magnético', desc: 'Impacto atordoa 0.2s.', eff: { stunDur: 0.2 } },
+    4: { name: 'Perfuração Total', desc: 'A lança atravessa todo o alcance sem parar (base).', eff: { fullBase: true } },
+    5: { name: 'Lança Estelar', desc: 'O disparo vira uma linha através do mapa inteiro.', eff: { starLine: true } }
+  }
+};
+
 // __DO3_PART2__
   return {
     COLS, ROWS, CELL_SIZE, BOARD_W, BOARD_H, SAVE_KEY, TOWER_MAX_LVL, PALETTE,
@@ -686,7 +876,9 @@ var DO3 = (function () {
     TARGET_MODES, WAVE_LETTERS, WAVE_LABELS, AIR_KINDS, SUPERS,
     MUTATIONS, COMBO, getMutationChoices,
     parseWaveString, makeEndlessWave, wpToPixels, getPathLength, getPosAtDist,
-    getPathBlockedCells, Save, ACHIEVEMENTS
+    getPathBlockedCells, Save, ACHIEVEMENTS,
+    MERGE_PARTS, TIER_STATS, TIER_NAMES, getTier, SHOT_PATTERNS, SUPERS_AUTO, superThreshold,
+    FACTORY_DATA, HIVEMIND, TIER_LOGIC
   };
 })();
 if (typeof window !== 'undefined') window.DO3 = DO3;

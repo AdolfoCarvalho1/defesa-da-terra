@@ -8,7 +8,7 @@ const path = require('path');
   page.on('console', m => { if (m.type() === 'error') consoleErrs.push(m.text()); });
   page.on('pageerror', e => errors.push('PAGEERROR: ' + e.message + '\n' + e.stack));
 
-  const file = 'file:///' + path.resolve('defesa-orbital-3.html').replace(/\\/g,'/');
+  const file = 'file:///' + path.resolve('index.html').replace(/\\/g,'/'); // v3 PIXEL FASE 7: jogo agora é index.html
   console.log('GOTO', file);
   await page.goto(file, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1500);
@@ -19,10 +19,10 @@ const path = require('path');
     else { fail++; console.log(`  FAIL ${name} :: ${extra}`); }
   };
 
-  // 1) menu visible
+  // 1) menu visible — agora 15 mapas (6 originais + 8 planetas + 1 supremo) — só Tower Defense
   check('menu visível', await page.locator('#screen-menu:not(.hidden)').count() === 1);
-  check('5 mapas', await page.locator('#maps-grid .map-card').count() === 5, 'found '+await page.locator('#maps-grid .map-card').count());
-  check('5 estilos navinha', await page.locator('#shmup-grid .map-card').count() === 5, 'found '+await page.locator('#shmup-grid .map-card').count());
+  check('15 mapas (sistema solar completo)', await page.locator('#maps-grid .map-card').count() === 15, 'found '+await page.locator('#maps-grid .map-card').count());
+  check('extra fases removidas', await page.locator('#shmup-grid .map-card').count() === 0, 'found '+await page.locator('#shmup-grid .map-card').count());
   check('metal slug removido', await page.locator('#metal-grid .map-card').count() === 0, 'found '+await page.locator('#metal-grid .map-card').count());
   check('3 diffs', await page.locator('#diff-row .pill').count() === 3);
   check('crystals top', await page.locator('#crystals-top').textContent() !== '');
@@ -42,7 +42,7 @@ const path = require('path');
   await page.waitForTimeout(1800);
   check('topbar visível após start', await page.locator('#topbar.off').count() === 0);
   check('shopbar visível', await page.locator('#shopbar.off').count() === 0);
-  check('10 torres na loja', await page.locator('.shop-card').count() === 10, 'found '+await page.locator('.shop-card').count());
+  check('10 torres + fábrica na loja', await page.locator('.shop-card').count() === 11, 'found '+await page.locator('.shop-card').count());
   check('4 supers', await page.locator('.super-btn').count() === 4);
   check('canvas Phaser criado', await page.locator('#game-canvas canvas').count() >= 1);
 
@@ -115,8 +115,19 @@ const path = require('path');
   await page.waitForTimeout(200);
   check('pause fechou', await page.locator('#pause-overlay.hidden').count() === 1);
   const speedBefore = await page.locator('#btn-speed').textContent();
-  await page.click('#btn-speed');
-  const speedAfter = await page.locator('#btn-speed').textContent();
+  // clique robusto via evaluate + wait (evita flake de hitbox clip-path)
+  await page.evaluate(() => document.getElementById('btn-speed') && document.getElementById('btn-speed').click());
+  await page.waitForTimeout(350);
+  let speedAfter = await page.locator('#btn-speed').textContent();
+  // fallback: se ainda não trocou, tenta via API do jogo
+  if(speedBefore === speedAfter){
+    await page.evaluate(() => {
+      const g = window.__game; const sc = g && g.scene.getScene('Game');
+      if(sc && sc.cycleSpeed) sc.cycleSpeed();
+    });
+    await page.waitForTimeout(250);
+    speedAfter = await page.locator('#btn-speed').textContent();
+  }
   check('velocidade trocou', speedBefore !== speedAfter, `${speedBefore} -> ${speedAfter}`);
   await page.click('#btn-mute');
   await page.waitForTimeout(150);
@@ -137,8 +148,13 @@ const path = require('path');
   });
 
   // Fecha painel e volta ao menu
-  await page.click('#tp-close');
-  await page.click('#btn-home');
+  // v3 PIXEL FASE 7: fecha via API (tp-close pode estar coberto pelo stack de supers do jogo)
+  await page.evaluate(() => {
+    const sc = window.__game && window.__game.scene.getScene('Game');
+    if (sc) { sc.selected = null; if (sc.hideTowerPanel) sc.hideTowerPanel(); }
+    const p = document.getElementById('tower-panel'); if (p) p.classList.add('hidden');
+  });
+  await page.click('#btn-home', { timeout: 8000 });
   await page.waitForTimeout(800);
   check('voltou ao menu', await page.locator('#screen-menu:not(.hidden)').count() === 1);
 

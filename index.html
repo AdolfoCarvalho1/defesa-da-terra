@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
 <link rel="icon" href="data:;base64,iVBORw0KGgo=">
 <title>Defesa da Terra — ULTRA</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -142,7 +142,8 @@ button:disabled{opacity:.35;cursor:not-allowed}
 @keyframes edgeHit{0%{opacity:1}100%{opacity:0}}
 
 /* SUPERS ULTRA */
-#supers{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;gap:8px;z-index:30}
+#supers{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;gap:8px;z-index:33;pointer-events:none} /* v3 PIXEL: acima do painel, mas deixa passar clique fora dos botões */
+#supers .super-btn{pointer-events:auto}
 .super-btn{--sc:var(--cyan);--cdpct:0%;position:relative;width:82px;height:60px;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
   background:linear-gradient(160deg, rgba(22,38,73,.95), rgba(13,21,42,.98));
@@ -160,9 +161,10 @@ button:disabled{opacity:.35;cursor:not-allowed}
 @keyframes pulseB{to{box-shadow:0 0 28px color-mix(in srgb,var(--sc) 70%, transparent)}}
 
 /* TOWER PANEL - HOLOGRAM */
-#tower-panel{position:absolute;right:10px;bottom:10px;width:280px;background:linear-gradient(180deg, rgba(13,22,44,.98), rgba(10,16,32,.98));
-  border:1px solid rgba(56,189,248,.25);border-right:3px solid var(--cyan);padding:12px;z-index:31;backdrop-filter:blur(14px);
+#tower-panel{position:absolute;right:10px;bottom:10px;width:280px;max-height:calc(100% - 20px);overflow-y:auto;background:linear-gradient(180deg, rgba(13,22,44,.98), rgba(10,16,32,.98));
+  border:1px solid rgba(56,189,248,.25);border-right:3px solid var(--cyan);padding:12px;z-index:31;backdrop-filter:blur(14px);pointer-events:auto;
   box-shadow:0 10px 30px rgba(0,0,0,.6), 0 0 20px rgba(56,189,248,.15), inset 0 1px 0 rgba(255,255,255,.06)}
+#tower-panel.hidden{pointer-events:none}
 #tower-panel::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg, transparent, var(--cyan), transparent);opacity:.6}
 .tp-head{display:flex;align-items:center;gap:10px}
 #tp-icon{font-size:26px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;
@@ -365,9 +367,9 @@ body > .modal{position:fixed}
 html,body{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 button,.map-card,.pill,.chk-wrap{touch-action:manipulation;user-select:none}
 @media(max-width:760px){
-  /* layout geral */
-  #layout{gap:6px}
-  #board-shell{max-width:96vw}
+  /* layout geral — force-fit on mobile viewports */
+  #layout{gap:6px;width:96vw;max-height:none;overflow:hidden}
+  #board-shell{max-width:100%}
   /* grids em 2 colunas */
   #maps-grid{grid-template-columns:repeat(2,1fr) !important;gap:8px}
   #shmup-grid{grid-template-columns:repeat(2,1fr) !important;gap:8px}
@@ -412,6 +414,172 @@ button,.map-card,.pill,.chk-wrap{touch-action:manipulation;user-select:none}
   #extra-phases .section-label{margin:6px 0 4px;font-size:9px}
   #extra-phases[style]{max-width:900px}
 }
+/* ===== IDENTIDADE UNIFICADA v3 — KIT MILITAR CHANFRADO (tokens.js) ===== */
+/* Força todos os componentes-chave ao mesmo idioma: chamf 10px + borda cyan .18 + bottom 2px + glow */
+.map-card, .shop-card, .pill, .super-btn, .tech-card, .codex-card, .ach-card, .mut-card, .modal-box, #tower-panel, #topbar, #board-shell, .crystals-pill, .chk-wrap {
+  /* usa vars já definidas em :root (derivadas de TOKENS) — garante consistência */
+  border-color: var(--line);
+}
+.map-card{
+  --tc: var(--cyan);
+  background: linear-gradient(160deg, rgba(16,26,48,.92), rgba(10,16,32,.98));
+  border:1px solid var(--line);
+  border-bottom:2px solid var(--tc);
+  clip-path: polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+  box-shadow: 0 4px 12px rgba(0,0,0,.3);
+}
+.map-card[data-theme="neptune-frontier"]{ --tc:#38bdf8; }
+.map-card[data-theme="saturn-rings"]{ --tc:#fbbf24; }
+.map-card[data-theme="jupiter-orbit"]{ --tc:#fb923c; }
+.map-card[data-theme="asteroid-belt"]{ --tc:#94a3b8; }
+.map-card[data-theme="earth-orbit"]{ --tc:#22d3ee; }
+.shop-card{
+  /* já usa --tc por torre, agora também clip-path consistente */
+  clip-path: polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+}
+.pill, .super-btn, .ctrl-btn, .chk-wrap, .crystals-pill{
+  clip-path: polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+}
+#tower-panel{
+  /* já tem border-right 3px cyan, reforça clip e glow */
+  clip-path: polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+  box-shadow:0 10px 30px rgba(0,0,0,.6), 0 0 20px rgba(56,189,248,.15), inset 0 1px 0 rgba(255,255,255,.06);
+}
+.modal-box{
+  clip-path: polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+}
+.tech-card, .codex-card, .ach-card, .mut-card{
+  clip-path: polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+  border:1px solid var(--line);
+  border-bottom:2px solid var(--line);
+}
+#board-shell{
+  /* base navy unificada via TILES, mantém borda cyan .22 */
+  background: radial-gradient(900px 500px at 50% 0%, #0a1a3a 0%, #050a1a 65%, #030712 100%);
+}
+/* Tipografia unificada reforçada */
+.map-card .mc-name, .shop-card .sc-name, .pill, .super-btn .sb-name, .modal-head h2, #tp-name{
+  font-family: 'Orbitron','Rajdhani',sans-serif;
+}
+.sc-cost, .hud-stat .val, #hud-wave-num, .m-stars, #combo-count{
+  font-family: 'JetBrains Mono','Orbitron',monospace;
+}
+/* ===== TELEFONE 100% — HORIZONTAL (sem teclado, todos os elementos em tela) ===== */
+html,body{
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+#btn-nextwave-mobile{
+  display:none;
+  background: linear-gradient(180deg, rgba(251,191,36,.22), rgba(251,191,36,.08));
+  border-color: var(--gold);
+  color: var(--gold);
+  font-weight: 900;
+  letter-spacing: .08em;
+  box-shadow: 0 0 18px rgba(251,191,36,.25);
+  min-height: 44px;
+  min-width: 110px;
+}
+/* Touch targets 44px mínimo */
+@media (pointer: coarse){
+  button, .shop-card, .map-card, .pill, .ctrl-btn{ min-height: 44px; }
+}
+/* Horizontal phone: tudo em tela, sem scroll, sem teclado */
+@media (orientation: landscape) and (max-height: 600px), (max-width: 900px) and (max-height: 500px){
+  html,body{ padding: 2px; overflow: hidden; height: 100vh; height: 100dvh; }
+  body{ padding-top: max(2px, env(safe-area-inset-top)); padding-bottom: max(2px, env(safe-area-inset-bottom)); }
+  #layout{
+    width: 100vw; width: 100dvw;
+    height: 100vh; height: 100dvh;
+    max-height: 100vh; max-height: 100dvh;
+    gap: 4px;
+    justify-content: stretch;
+  }
+  #topbar{
+    padding: 4px 6px;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+  .hud-stat{ min-width: 68px; padding: 3px 6px; }
+  .hud-stat .lbl{ font-size: 7px; }
+  .hud-stat .val{ font-size: 13px; }
+  #wave-ring{ width: 38px; height: 38px; }
+  #hud-wave-num{ font-size: 12px; }
+  .wave-txt span{ font-size: 11px !important; }
+  #countdown-chip{ font-size: 9px; min-width: 80px; }
+  #next-preview{ max-width: 120px; }
+  .ctrl-btn{ min-width: 38px; min-height: 38px; padding: 6px 6px; font-size: 10px; }
+  #board-shell{
+    flex: 0 1 auto;
+    width: min(100%, calc((100dvh - 58px - 62px - 12px) * 1.615));
+    max-width: 100%;
+    max-height: calc(100dvh - 58px - 62px - 12px);
+    aspect-ratio: 924 / 572;
+    height: auto;
+    min-height: 0;
+    margin: 0 auto;
+    align-self: center;
+  }
+  #shopbar{
+    gap: 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+    flex-wrap: nowrap;
+  }
+  #shopbar::-webkit-scrollbar{ display:none; }
+  .shop-card{
+    flex: 0 0 96px;
+    min-width: 96px;
+    max-width: 96px;
+    padding: 6px 6px;
+    gap: 6px;
+  }
+  .shop-card .sc-icon{ font-size: 18px; width: 22px; }
+  .shop-card .sc-name{ font-size: 8.5px; line-height: 1.15; }
+  .shop-card .sc-cost{ font-size: 10px; }
+  #tower-panel{
+    width: 300px;
+    max-height: 76vh;
+    max-height: 76dvh;
+    right: 6px;
+    bottom: 62px;
+  }
+  #supers{
+    top: 6px;
+    right: 6px;
+    gap: 4px;
+  }
+  .super-btn{
+    width: 68px;
+    height: 48px;
+  }
+  .super-btn .sb-name{ font-size: 8px; }
+  .super-btn .sb-hot{ font-size: 7px; }
+  #screen-menu{
+    padding: 1% 2%;
+    gap: 6px;
+  }
+  .menu-head{ margin-bottom: 6px; }
+  .menu-head h1{ font-size: clamp(18px, 4vw, 26px); }
+  #maps-grid{ grid-template-columns: repeat(3, 1fr) !important; gap: 6px; max-width: 100%; }
+  #diff-row{ gap: 6px; margin: 4px 0 6px; }
+  .pill{ padding: 8px 14px; font-size: 10px; }
+  .menu-actions{ max-width: 360px; }
+  #btn-start{ padding: 12px 24px; font-size: 13px; }
+  #btn-nextwave-mobile{ display: inline-flex; align-items: center; justify-content: center; }
+  /* Esconde dica de teclado em horizontal phone */
+  .menu-foot{ display: none !important; }
+}
+@media (orientation: landscape) and (max-height: 380px){
+  #maps-grid{ grid-template-columns: repeat(4, 1fr) !important; }
+  .menu-head p{ display: none; }
+  #board-shell{ height: calc(100dvh - 52px - 56px); }
+}
 </style>
 </head>
 <body>
@@ -421,6 +589,8 @@ button,.map-card,.pill,.chk-wrap{touch-action:manipulation;user-select:none}
     <div class="hud-group">
       <div class="hud-stat"><span class="lbl">CRÉDITOS</span><span class="val" id="hud-credits" style="color:var(--gold)">$0</span></div>
       <div class="hud-stat"><span class="lbl">TERRA HP</span><span class="val" id="hud-lives" style="color:var(--green)">◇ 20</span></div>
+      <div class="hud-stat"><span class="lbl">PEÇAS</span><span class="val" id="hud-parts" style="color:#34d399">0⚙</span></div>
+      <button class="ctrl-btn chamf" id="btn-hivemind" title="Laboratório Hivemind: +12% HP e +8% ouro dos inimigos por nível (ganha mais peças)" style="border-color:#a78bfa;color:#c4b5fd;font-size:10px">🧬 HP ×1.00 (+15⚙)</button>
     </div>
     <div class="wave-mod">
       <div id="wave-ring" style="--wpct:100%"><span id="hud-wave-num">1</span></div>
@@ -429,6 +599,7 @@ button,.map-card,.pill,.chk-wrap{touch-action:manipulation;user-select:none}
         <span id="next-preview"></span>
       </div>
       <span id="countdown-chip"></span>
+      <button class="chamf" id="btn-nextwave-mobile" title="Próxima onda">▶ ONDA</button>
     </div>
     <div class="hud-group" style="margin-left:8px">
       <button class="ctrl-btn chamf" id="btn-speed" title="Velocidade [F]">×1</button>
@@ -457,10 +628,6 @@ button,.map-card,.pill,.chk-wrap{touch-action:manipulation;user-select:none}
         <span class="crystals-pill">⟪⟫ CRISTAIS <span id="crystals-top">0</span></span>
       </div>
       <div id="maps-grid"></div>
-      <div id="extra-phases" style="width:100%;max-width:1180px;margin:6px 0 10px">
-        <div class="section-label cyan">— ★ CAMPANHAS NAVINHA • 5 ESTILOS × 5 FASES = 25 —</div>
-        <div id="shmup-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px"></div>
-      </div>
       <div id="diff-row"></div>
       <div class="menu-row">
         <label class="chk-wrap chamf" id="opt-endless-wrap">
@@ -472,7 +639,6 @@ button,.map-card,.pill,.chk-wrap{touch-action:manipulation;user-select:none}
       </div>
       <div class="menu-actions">
         <button class="chamf" id="btn-start">▶ INICIAR DEFESA ULTRA</button>
-        <button class="btn small chamf" id="btn-shmup">⚔ FASES EXTRAS (10)</button>
       </div>
       <div class="menu-foot">Q/W/E/R SUPERS • ESPAÇO = PRÓXIMA ONDA • F = TURBO • P = PAUSA • CLIQUE = CONSTRUIR</div>
     </div>
@@ -585,8 +751,12 @@ button,.map-card,.pill,.chk-wrap{touch-action:manipulation;user-select:none}
 <div id="toasts"></div>
 
 <script src="phaser.min.js"></script>
+<script src="assets/tokens.js"></script>
 <script src="assets/data.js"></script>
+<script src="assets/tiles.js"></script>
+<script src="assets/pixelart.js"></script>
 <script src="assets/audio.js"></script>
+<script src="assets/sfx-extra.js"></script>
 <script src="assets/scenes.js"></script>
 <script>
 // MUTE GLOBAL robusto (funciona fora do Phaser também)

@@ -47,6 +47,8 @@
         overdrive: { key: 'overdrive', cd: 0, maxCd: D.SUPERS.overdrive.maxCd * cdMul, dur: 0 }
       },
       kills: 0, leakCounts: {}, leakedFlying: false, leaks: 0,
+      parts: 0, // v3 PIXEL FASE 5: recurso PEÇAS ⚙
+      enemyHpLevel: 0, // v3 PIXEL FASE 5: laboratório Hivemind (por run)
       endlessHpMul: 1, autoWaveTimer: 0, autoNext: false,
       activeBoss: null, hitStop: 0, result: null, chrono: 0,
       combo: 0, comboTimer: 0, comboMax: 0,
@@ -61,7 +63,8 @@
   function ev(S, e) { S.events.push(e); }
 
   function hpMultiplier(S) {
-    return (1 + S.mapIdx * 0.25 + S.wave * 0.12) * S.diff.hpMul * S.endlessHpMul;
+    // v3 PIXEL FASE 5: laboratório Hivemind soma +12% HP por nível na run
+    return (1 + S.mapIdx * 0.25 + S.wave * 0.12) * S.diff.hpMul * S.endlessHpMul * (1 + (S.enemyHpLevel || 0) * D.HIVEMIND.hpAdd);
   }
 
   function spawnEnemy(S, type) {
@@ -112,12 +115,11 @@
   }
 
   function canHitAir(tower) {
-    if (D.AIR_KINDS.indexOf(tower.defRef ? tower.defRef.kind : tower.def.kind) >= 0) return true;
     const def = tower.defRef || tower.def;
-    if (def.id === 'cannon' && tower.specBranch === 'B') return true;
-    if (def.id === 'missile' && tower.specBranch === 'A') return true;
-    if (def.id === 'rail' && tower.level >= 4) return true;
-    return false;
+    // FIX: naves vs naves — todas as torres de combate acertam voadores (sem sentido ter nave que não acerta nave)
+    if (def.kind === 'factory') return false;
+    if (def.kind === 'buff') return false; // amp é suporte, não atira
+    return true;
   }
 
   function getTowerStats(S, t) {
@@ -160,17 +162,37 @@
     }
 
     let buffDmg = 0, buffRng = 0, buffRate = 0;
+    let ampCritAdd = 0;
+    const tTier = D.getTier(t.level);
     for (const other of S.towers) {
       const od = other.defRef || other.def;
       if (od.id !== 'amp' || other === t) continue;
-      const odRng = od.rng + (other.level - 1) * 10;
+      // v3 PIXEL FASE 6: amp T2 anel 20% maior
+      const odTier = D.getTier(other.level);
+      const odRng = (od.rng + (other.level - 1) * 10) * ((D.TIER_LOGIC.amp[odTier] && D.TIER_LOGIC.amp[odTier].eff.ringMul) || 1);
       if (Math.hypot(other.x - t.x, other.y - t.y) <= odRng) {
         buffDmg = Math.max(buffDmg, other.specBranch === 'A' ? 0.45 : 0.25 + (other.level - 1) * 0.04);
         buffRng = Math.max(buffRng, other.specBranch === 'B' ? 0.40 : 0);
         buffRate = Math.max(buffRate, other.specBranch === 'A' ? 0.25 : 0);
+        // v3 PIXEL FASE 6: amp T3/T4/T5 extras
+        if (odTier >= 3) buffRate += D.TIER_LOGIC.amp[3].eff.rateAdd;
+        if (odTier >= 4) buffDmg += D.TIER_LOGIC.amp[4].eff.dmgAdd;
+        if (odTier >= 5) ampCritAdd = Math.max(ampCritAdd, D.TIER_LOGIC.amp[5].eff.critAdd);
       }
     }
     dmg *= 1 + buffDmg; rng *= 1 + buffRng; rate *= 1 + buffRate;
+    skillCrit += ampCritAdd;
+    // v3 PIXEL FASE 6: lógica por tier da própria torre
+    const tl = D.TIER_LOGIC[def.id] && D.TIER_LOGIC[def.id][tTier] ? D.TIER_LOGIC[def.id][tTier].eff : null;
+    if (tl) {
+      if (tl.pierce) skillPierce += tl.pierce;               // gatling T4
+      if (tl.critAdd) skillCrit += tl.critAdd;               // sniper T4 / amp T5 vizinhas
+      if (tl.comboRate && S.combo) rate *= 1 + Math.min(tl.comboRate, S.combo * 0.01); // gatling T5
+      if (def.kind === 'beam') {
+        // laser T4 fásico: metade do dano ignora escudo (aplicado no tick abaixo via flag)
+        if (tl.shieldPhase) t._shieldPhase = tl.shieldPhase; else t._shieldPhase = null;
+      }
+    } else if (def.kind === 'beam') t._shieldPhase = null;
     if (S.powers && S.powers.overdrive && S.powers.overdrive.dur > 0) { rate *= D.SUPERS.overdrive.rateMul; if(S.mutBuffs && S.mutBuffs.odDmg) dmg *= 1 + S.mutBuffs.odDmg; }
 
     // aplica skills de pierce/crit/multi no retorno
@@ -226,9 +248,20 @@
       amount *= 2.2;
     }
     let finalDmg = amount;
-    if (!opt.pure && e.armor > 0) finalDmg = Math.max(1, finalDmg - e.armor);
+    // v3 PIXEL FASE 6: cannon T3 perfura armadura; cryo T3: lentos recebem +25%
+    const shooterTier = opt.src ? D.getTier(opt.src.level) : 0;
+    const shooterLogic = (opt.src && D.TIER_LOGIC[opt.src.defRef.id]) ? D.TIER_LOGIC[opt.src.defRef.id][shooterTier] : null;
+    if (!opt.pure && e.armor > 0) {
+      const ap = (shooterLogic && shooterLogic.eff && shooterLogic.eff.armorPierce) || 0;
+      finalDmg = Math.max(1, finalDmg - Math.max(0, e.armor - ap));
+    }
+    if (opt.src && shooterLogic && shooterLogic.eff.vsArmor) finalDmg *= shooterLogic.eff.vsArmor; // rail T2 vs blindados
     if (opt.sb && e.shield > 0) finalDmg *= 4;
     if (!opt.pure && e.cryoVuln > 0) finalDmg *= 1.4;
+    else if (!opt.pure && e.slowTimer > 0) { // v3 PIXEL FASE 6: cryo T3 quebra total
+      const src = opt.src;
+      if (src && D.TIER_LOGIC.cryo[D.getTier(src.level)] && D.TIER_LOGIC.cryo[D.getTier(src.level)].eff.chillVuln && src.defRef.id === 'cryo') finalDmg *= 1.25;
+    }
     if (e.markedTimer > 0) finalDmg *= 1.35;
     e.flash = 0.08;
     if (e.shield > 0) {
@@ -248,12 +281,24 @@
     if (e.dead) return;
     e.dead = true;
     S.kills++;
+    // v3 PIXEL FASE 4: carga do super automático por tipo de nave (= res do inimigo)
+    const killerKind = e.poisonBy && !e.poisonBy.defRef.kind ? e.poisonBy.defRef.id : null;
+    let charged = false;
+    for (const t of S.towers) {
+      if (t.defRef.kind === 'factory') continue;
+      // credita na torre do próprio tipo OU na que matou por veneno
+      if (t.defRef.id === e.type_key || (killerKind && t.defRef.id === killerKind)) { t.superCharge = (t.superCharge || 0) + (e.defRef.res || 1); charged = true; }
+      else if (!charged && t.superCharge !== undefined) continue;
+    }
+    if (charged) ev(S, { t: 'float', x: e.x, y: e.y - 30, txt: '+carga', col: '#fde047', size: 9 });
     S.combo = Math.min(D.COMBO.maxStacks, (S.combo||0)+1);
     S.comboTimer = D.COMBO.window;
     S.comboMax = Math.max(S.comboMax||0, S.combo);
     const comboBonus = 1 + (S.combo * D.COMBO.goldPerStack);
     const mutGold = 1 + ((S.mutBuffs && S.mutBuffs.gold) || 0);
-    const goldVal = Math.round(e.defRef.gold * (1 + techLvl('salvage') * 0.15) * mutGold * comboBonus);
+    // v3 PIXEL FASE 5: laboratório Hivemind dá +8% ouro por nível
+    const hiveGold = 1 + (S.enemyHpLevel || 0) * D.HIVEMIND.goldAdd;
+    const goldVal = Math.round(e.defRef.gold * (1 + techLvl('salvage') * 0.15) * mutGold * comboBonus * hiveGold);
     S.credits += goldVal;
     S.creditsEarned += goldVal;
     if(S.combo >= 5) ev(S, { t:'combo', n:S.combo, mult: comboBonus });
@@ -323,6 +368,23 @@
   }
 
   /* ---- Disparo de torre por tipo ---- */
+  // v3 PIXEL FASE 3: helper único de projétil bullet (usado por cannon/gatling em qualquer tier)
+  function spawnBullet(S, t, def, target, stats, spread, speed) {
+    const isFlak = t.specBranch === 'B' && def.specB && def.specB.multi;
+    let dmg = stats.dmg;
+    if (def.id === 'gatling' && t.specBranch === 'A') dmg *= 1 + Math.min(2.5, t.rampTime * 0.8);
+    if (isFlak) dmg = stats.dmg * 0.6;
+    let isCritS = false;
+    if (stats.critBonus && Math.random() < stats.critBonus) { isCritS = true; dmg *= 1.5; }
+    S.projectiles.push({
+      kind: 'bullet', x: t.x, y: t.y, targetId: target.eid,
+      vx: Math.cos(t.aimAngle + spread) * speed, vy: Math.sin(t.aimAngle + spread) * speed,
+      dmg, col: def.color, life: 1.2,
+      pierce: ((t.specBranch === 'B' && def.specB && def.specB.pierce) || 1) + (stats.pierceBonus || 0),
+      stun: (t.specBranch === 'B' && def.specB && def.specB.stun) || 0,
+      crit: isCritS, hitIds: {}, tower: t, src: t
+    });
+  }
   function fireTower(S, t, target, stats) {
     const def = t.defRef || t.def;
     t.aimAngle = Math.atan2(target.y - t.y, target.x - t.x);
@@ -332,72 +394,70 @@
 
     if (def.kind === 'bullet') {
       SND.shoot('bullet', t.specBranch);
+      const tier = D.getTier(t.level);
       const isFlak = t.specBranch === 'B' && def.specB && def.specB.multi;
+      const pat = D.SHOT_PATTERNS[def.id] || null;
       let count = isFlak ? def.specB.multi : 1;
       if (stats.multiBonus) count += stats.multiBonus;
-      const extraPierce = (stats.pierceBonus || 0);
+      // v3 PIXEL FASE 3: cannon leque por tier / gatling rajada por tier
+      if (pat && !isFlak && def.id === 'cannon') count = Math.max(count, pat.multi[tier - 1]);
+      if (pat && !isFlak && def.id === 'gatling') count = Math.max(count, pat.burst[tier - 1]);
       for (let i = 0; i < count; i++) {
         const spread = isFlak ? (i - (count - 1) / 2) * 0.18 : (count > 1 ? (i - (count - 1) / 2) * 0.12 : 0);
-        let dmg = stats.dmg;
-        if (def.id === 'gatling' && t.specBranch === 'A') dmg *= 1 + Math.min(2.5, t.rampTime * 0.8);
-        if (isFlak) dmg = stats.dmg * 0.6;
-        // skill crit
-        let isCritS = false;
-        if (stats.critBonus && Math.random() < stats.critBonus) { isCritS = true; dmg *= 1.5; }
-        S.projectiles.push({
-          kind: 'bullet', x: t.x, y: t.y, targetId: target.eid,
-          vx: Math.cos(t.aimAngle + spread) * 380, vy: Math.sin(t.aimAngle + spread) * 380,
-          dmg, col: def.color, life: 1.2,
-          pierce: ((t.specBranch === 'B' && def.specB && def.specB.pierce) || 1) + extraPierce,
-          stun: (t.specBranch === 'B' && def.specB && def.specB.stun) || 0,
-          crit: isCritS,
-          hitIds: {}, tower: t
-        });
+        spawnBullet(S, t, def, target, stats, spread, 380);
       }
       SND.gatlingTick();
     } else if (def.kind === 'splash') {
       SND.shoot('splash');
+      const tier = D.getTier(t.level);
       const spec = t.specBranch === 'A' ? def.specA : (t.specBranch === 'B' ? def.specB : null);
-      const burn = !!(spec && spec.burn);
-      if (spec && spec.salvos) {
-        for (let i = 0; i < spec.salvos; i++) {
-          S.projectiles.push({
-            kind: 'missile', x: t.x, y: t.y, targetId: target.eid, speed: 300,
-            dmg: stats.dmg * spec.dmgMul, splash: stats.splash, hitAir: true,
-            burn, col: def.color, life: 2.2, delay: i * 0.12, tower: t
-          });
-        }
-      } else {
-        S.projectiles.push({
-          kind: 'missile', x: t.x, y: t.y, targetId: target.eid, speed: 260,
-          dmg: stats.dmg, splash: stats.splash + ((spec && spec.splashAdd) || 0),
-          hitAir: stats.canHitAir, burn, col: def.color, life: 2.0, delay: 0, tower: t
-        });
-      }
+      const burn = !!(spec && spec.burn) || !!(D.TIER_LOGIC[def.id] && D.TIER_LOGIC[def.id][tier] && D.TIER_LOGIC[def.id][tier].eff.burn && tier >= 2);
+      const pat = D.SHOT_PATTERNS.missile;
+      const mirv = pat.mirv[tier - 1];
+      const salvoN = Math.max((spec && spec.salvos) || 0, pat.salvo[tier - 1]);
+      const mkMissile = (tgt, delay, isSub) => S.projectiles.push({
+        kind: 'missile', x: t.x, y: t.y, targetId: tgt.eid, speed: 300,
+        dmg: stats.dmg * ((spec && spec.dmgMul) || 1), splash: stats.splash,
+        hitAir: stats.canHitAir || tier >= 4,
+        burn, col: def.color, life: 2.2, delay, tower: t,
+        mirv: isSub ? 0 : (mirv ? 3 : ((spec && spec.salvos && t.specBranch === 'B') || 0)), // T5 MIRV / spec B frag
+        tier
+      });
+      for (let i = 0; i < Math.max(1, salvoN); i++) mkMissile(target, i * 0.12, false);
     } else if (def.kind === 'slow') {
       SND.shoot('slow');
+      const tier = D.getTier(t.level);
       const spec = t.specBranch === 'A' ? def.specA : null;
       const slowVal = t.specBranch === 'A' ? (def.specA.slowVal || 0.75) : 0.5;
+      const pulses = D.SHOT_PATTERNS.cryo.pulses[tier - 1] || 1; // v3 PIXEL FASE 3: anéis por tier
+      for (let ring = 0; ring < pulses; ring++) {
+        ev(S, { t: 'ring', x: t.x, y: t.y, maxR: stats.rng * (0.6 + 0.4 * ((ring + 1) / pulses)), col: '#38bdf8' });
+      }
       for (const e of S.enemies) {
         if (e.dead || Math.hypot(e.x - t.x, e.y - t.y) > stats.rng) continue;
         if (!e.defRef.slowImmune) {
-          e.slowTimer = 2.2; e.slowFactor = slowVal;
+          e.slowTimer = 2.2; e.slowFactor = Math.min(slowVal, e.slowFactor || 1) * (pulses >= 4 ? 0.7 : 1);
           if (spec && spec.physDebuff) e.cryoVuln = 2.2;
+          // T2 cryo logic: chance de congelar
+          const cl = D.TIER_LOGIC.cryo && D.TIER_LOGIC.cryo[tier];
+          if (cl && cl.eff.freezeChance && tier >= 2 && Math.random() < cl.eff.freezeChance) e.stunTimer = Math.max(e.stunTimer, cl.eff.freezeDur || 0.8);
         }
-        damageEnemy(S, e, stats.dmg * 0.5);
+        damageEnemy(S, e, stats.dmg * 0.5 * pulses);
       }
-      ev(S, { t: 'ring', x: t.x, y: t.y, maxR: stats.rng, col: '#38bdf8' });
+      if (tier >= 5) ev(S, { t: 'banner', txt: 'NEVASCA!', col: '#38bdf8' });
     } else if (def.kind === 'chain') {
       SND.shoot('chain');
+      const tier = D.getTier(t.level);
       const spec = t.specBranch === 'A' ? def.specA : (t.specBranch === 'B' ? def.specB : null);
-      const maxChains = def.chain + ((spec && spec.chainAdd) || 0) + ((S.mutBuffs && S.mutBuffs.chain)||0)*2;
+      // v3 PIXEL FASE 3: cadeia cresce por tier
+      const maxChains = Math.max(D.SHOT_PATTERNS.tesla.chain[tier - 1], def.chain + ((spec && spec.chainAdd) || 0)) + ((S.mutBuffs && S.mutBuffs.chain)||0)*2;
       const sb = !!(spec && spec.shieldBuster);
       const stunCh = (spec && spec.stunChance) || 0;
       let current = target;
       const hitList = [current];
       const pts = [{ x: t.x, y: t.y }, { x: current.x, y: current.y }];
       for (let c = 0; c < maxChains; c++) {
-        damageEnemy(S, current, stats.dmg * Math.pow(0.78, c), { sb });
+        damageEnemy(S, current, stats.dmg * Math.pow(0.78, c), { sb, src: t });
         if (stunCh && Math.random() < stunCh && !current.dead) current.stunTimer = Math.max(current.stunTimer, 0.4);
         let next = null, nextDist = 100;
         for (const other of S.enemies) {
@@ -413,17 +473,27 @@
       ev(S, { t: 'chain', pts });
     } else if (def.kind === 'snipe') {
       SND.shoot('snipe');
+      const tier = D.getTier(t.level);
       const spec = t.specBranch === 'A' ? def.specA : (t.specBranch === 'B' ? def.specB : null);
       const critCh = (spec && spec.critChance) || 0.25;
       const critMul = (spec && spec.critMul) || 2.2;
-      const isCrit = Math.random() < critCh;
-      if (spec && spec.exec && (target.hp / target.maxHp) < spec.exec) {
-        damageEnemy(S, target, target.hp + target.shield + 99999, { pure: true, crit: true });
-      } else {
-        damageEnemy(S, target, isCrit ? stats.dmg * critMul : stats.dmg, { crit: isCrit });
+      // v3 PIXEL FASE 3: alvos por tier (T4=2, T5=3) + tracer por tier
+      const nTargets = D.SHOT_PATTERNS.sniper.targets[tier - 1] || 1;
+      const targets = [target];
+      for (const e of S.enemies) {
+        if (targets.length >= nTargets) break;
+        if (e !== target && !e.dead && !targets.includes(e)) targets.push(e);
       }
-      if (spec && spec.spotter && !target.dead) target.markedTimer = 4.0;
-      ev(S, { t: 'tracer', x1: t.x, y1: t.y, x2: target.x, y2: target.y, col: def.color, w: 2.5 });
+      for (const tgt of targets) {
+        const isCrit = Math.random() < critCh;
+        if (spec && spec.exec && (tgt.hp / tgt.maxHp) < spec.exec) {
+          damageEnemy(S, tgt, tgt.hp + tgt.shield + 99999, { pure: true, crit: true, src: t });
+        } else {
+          damageEnemy(S, tgt, isCrit ? stats.dmg * critMul : stats.dmg, { crit: isCrit, src: t });
+        }
+        if (spec && spec.spotter && !tgt.dead) tgt.markedTimer = 4.0;
+        ev(S, { t: 'tracer', x1: t.x, y1: t.y, x2: tgt.x, y2: tgt.y, col: def.color, w: D.SHOT_PATTERNS.sniper.tracer[tier - 1] ? 2.5 + tier * 0.5 : 2 });
+      }
     } else if (def.kind === 'dot') {
       SND.shoot('dot');
       const spec = t.specBranch === 'A' ? def.specA : (t.specBranch === 'B' ? def.specB : null);
@@ -435,18 +505,31 @@
       ev(S, { t: 'ring', x: t.x, y: t.y, maxR: stats.rng, col: '#a3e635' });
     } else if (def.kind === 'pierce') {
       SND.shoot('pierce');
+      const tier = D.getTier(t.level);
       const spec = t.specBranch === 'A' ? def.specA : null;
-      const beamLen = (spec && spec.fullPierce) ? BW : stats.rng + 30;
-      const dx = Math.cos(t.aimAngle), dy = Math.sin(t.aimAngle);
-      for (const e of S.enemies) {
-        const ox = e.x - t.x, oy = e.y - t.y;
-        const proj = ox * dx + oy * dy;
-        if (proj > 0 && proj <= beamLen && Math.abs(ox * (-dy) + oy * dx) < 18) {
-          damageEnemy(S, e, stats.dmg, { pure: true });
+      // v3 PIXEL FASE 3: lanças por tier; T4 perfura total; T5 lança estelar (linha no mapa todo)
+      const pat = D.SHOT_PATTERNS.rail;
+      const starLine = pat.star[tier - 1] || (D.TIER_LOGIC.rail && D.TIER_LOGIC.rail[5].eff.starLine && tier >= 5);
+      const fullPierce = pat.full[tier - 1];
+      const beamLen = starLine ? BW * 1.5 : ((fullPierce || (spec && spec.fullPierce)) ? BW : stats.rng + 30);
+      const angles = [];
+      const beamsN = pat.full[tier-1] || pat.star[tier-1] ? 1 : pat.beams[tier - 1];
+      for (let b = 0; b < beamsN; b++) angles.push(t.aimAngle + (b - (beamsN - 1) / 2) * 0.22);
+      for (const ang of angles) {
+        const dx = Math.cos(ang), dy = Math.sin(ang);
+        for (const e of S.enemies) {
+          const ox = e.x - t.x, oy = e.y - t.y;
+          const proj = ox * dx + oy * dy;
+          if (proj > 0 && proj <= beamLen && Math.abs(ox * (-dy) + oy * dx) < (starLine ? 26 : 18)) {
+            damageEnemy(S, e, stats.dmg, { pure: true });
+            // T3 rail logic: atordoa
+            const rl = D.TIER_LOGIC.rail && D.TIER_LOGIC.rail[tier];
+            if (rl && rl.eff.stunDur) e.stunTimer = Math.max(e.stunTimer, rl.eff.stunDur);
+          }
         }
+        ev(S, { t: 'tracer', x1: t.x, y1: t.y, x2: t.x + dx * beamLen, y2: t.y + dy * beamLen, col: '#ffffff', w: 4 + tier * 0.6 });
       }
-      ev(S, { t: 'tracer', x1: t.x, y1: t.y, x2: t.x + dx * beamLen, y2: t.y + dy * beamLen, col: '#ffffff', w: 4 });
-      ev(S, { t: 'shake', mag: 3 });
+      ev(S, { t: 'shake', mag: 3 + tier });
     }
   }
 
@@ -491,8 +574,145 @@
     return true;
   }
 
-  /* ---- Torres: construir / melhorar / vender / specs ---- */
+  /* ---- v3 PIXEL FASE 4: SUPER AUTOMÁTICO por tipo de nave (carga = abates daquele tipo) ---- */
+  function getSuperCharge(S, t) {
+    const tier = D.getTier(t.level);
+    const need = D.superThreshold(tier);
+    const charge = (t.superCharge || 0);
+    return { charge, need, pct: Math.min(1, charge / need), ready: charge >= need, tier };
+  }
+  function forceSuperCharge(S, t, amount) {
+    if (!t || !S.towers.includes(t)) return null;
+    t.superCharge = (t.superCharge || 0) + (amount == null ? 9999 : amount);
+    S._superTestArmed = true; // flag p/ teste: próxima checagem dispara
+    return fireAutoSuperIfReady(S, t);
+  }
+  function fireAutoSuperIfReady(S, t) {
+    if (!t || t.defRef.kind === 'factory' || S.state === 'victory' || S.state === 'defeat') return false;
+    const sc = getSuperCharge(S, t);
+    if (!sc.ready) return false;
+    t.superCharge = 0;
+    fireAutoSuper(S, t.defRef.id, t);
+    return true;
+  }
+  function fireAutoSuper(S, kind, tower) {
+    const meta = D.SUPERS_AUTO[kind];
+    if (!meta) return false;
+    SND.superFire();
+    ev(S, { t: 'banner', txt: '★ ' + meta.name.toUpperCase() + ' — SUPER DE ' + defName(tower).toUpperCase() + '!', col: meta.col || '#fbbf24', strong: true });
+    S.autoSupersFired = (S.autoSupersFired || 0) + 1; // contador exposto p/ teste
+    ev(S, { t: 'autoSuperFx', x: tower.x, y: tower.y, col: meta.col || '#fbbf24' });
+    const alive = () => S.enemies.filter(e => !e.dead && !e.leaked);
+    switch (kind) {
+      case 'cannon': { // Barragem Orbital: 20 obuses na maior concentração
+        let bx = BW / 2, by = BH / 2, bestN = -1;
+        for (const e of alive()) {
+          let n = 0;
+          for (const o of alive()) if (Math.hypot(o.x - e.x, o.y - e.y) < 90) n++;
+          if (n > bestN) { bestN = n; bx = e.x; by = e.y; }
+        }
+        for (let i = 0; i < 20; i++) {
+          const ox = bx + (Math.random() - 0.5) * 120, oy = by + (Math.random() - 0.5) * 120;
+          let hit = 0;
+          for (const e of alive()) if (Math.hypot(e.x - ox, e.y - oy) < 46) { damageEnemy(S, e, tower.damageDealt >= 0 ? 60 + tower.level * 8 : 60); hit++; }
+          ev(S, { t: 'boom', x: ox, y: oy, r: 40, col: '#e2e8f0', big: false });
+        }
+        break;
+      }
+      case 'gatling': { // Tornado de Chumbo: 360° por 3s em alcance dobrado
+        const rng2 = tower.rng !== undefined ? tower.rng : 200; // headless fallback
+        let hits = 0;
+        // aplicação instantânea em área dobrada (equivalente ao tornado)
+        const st = getTowerStats(S, tower);
+        for (const e of alive()) {
+          if (Math.hypot(e.x - tower.x, e.y - tower.y) <= st.rng * 2) {
+            damageEnemy(S, e, st.dmg * 6); hits++;
+            if (hits % 4 === 0) ev(S, { t: 'tracer', x1: tower.x, y1: tower.y, x2: e.x, y2: e.y, col: '#fbbf24', w: 2 });
+          }
+        }
+        break;
+      }
+      case 'laser': { // Prisma Solar: varre a rota inteira por 2.5s → dano em todos na rota principal
+        const st = getTowerStats(S, tower);
+        for (let d = 0; d < S.routeLengths[0]; d += 14) {
+          const p = D.getPosAtDist(S.routes[0], d);
+          ev(S, { t: 'spark', x: p.x, y: p.y, col: '#f43f5e' });
+        }
+        for (const e of alive()) damageEnemy(S, e, st.dmg * 8, { pure: true });
+        break;
+      }
+      case 'missile': { // Enxame MIRV: 16 mísseis nos alvos mais caros
+        const sorted = alive().sort((a, b) => (b.defRef.gold) - (a.defRef.gold));
+        for (let i = 0; i < 16; i++) {
+          const tgt = sorted[i % Math.max(1, sorted.length)];
+          if (!tgt) break;
+          S.projectiles.push({ kind: 'missile', x: tower.x, y: tower.y, targetId: tgt.eid, speed: 340, dmg: 80 + tower.level * 6, splash: 70, hitAir: true, burn: true, col: '#fb923c', life: 2.5, delay: i * 0.07, tower, mirv: 0 });
+        }
+        break;
+      }
+      case 'cryo': { // Era Glacial: congela TODOS 3s
+        for (const e of alive()) { if (!e.defRef.slowImmune || e.defRef.isBoss) { e.stunTimer = Math.max(e.stunTimer, 3); } e.slowTimer = 3; e.slowFactor = 0.05; }
+        ev(S, { t: 'emp' });
+        break;
+      }
+      case 'tesla': { // Tempestade Final: 12 relâmpagos em cadeia global
+        const st = getTowerStats(S, tower);
+        for (let i = 0; i < 12; i++) {
+          const pool = alive();
+          if (!pool.length) break;
+          const start = pool[Math.floor(Math.random() * pool.length)];
+          let cur = start; const pts = [{ x: start.x, y: start.y }]; const hit = new Set();
+          for (let c = 0; c < 4; c++) {
+            damageEnemy(S, cur, st.dmg * 2, { pure: true }); hit.add(cur.eid);
+            let next = null, nd = 130;
+            for (const o of alive()) { if (!hit.has(o.eid)) { const dd = Math.hypot(o.x - cur.x, o.y - cur.y); if (dd < nd) { nd = dd; next = o; } } }
+            if (!next) break;
+            pts.push({ x: next.x, y: next.y }); cur = next;
+          }
+          ev(S, { t: 'chain', pts });
+        }
+        break;
+      }
+      case 'sniper': { // Sentença: executa os 3 de menor HP
+        const weak = alive().sort((a, b) => (a.hp + a.shield) - (b.hp + b.shield)).slice(0, 3);
+        for (const e of weak) {
+          damageEnemy(S, e, e.hp + e.shield + 99999, { pure: true, crit: true });
+          ev(S, { t: 'tracer', x1: tower.x, y1: tower.y, x2: e.x, y2: e.y, col: '#67e8f9', w: 4 });
+        }
+        break;
+      }
+      case 'venom': { // Maré Nanopraga: envenena todos 8s
+        const st = getTowerStats(S, tower);
+        for (const e of alive()) { e.poisonTimer = 8; e.poisonDps = Math.max(st.dmg, 10); e.poisonBy = tower; }
+        ev(S, { t: 'ring', x: BW / 2, y: BH / 2, maxR: BW, col: '#a3e635' });
+        break;
+      }
+      case 'amp': { // Sobrecarga Total: +100% dano global 6s (anel dourado)
+        S.overdriveBuff = Math.max(S.overdriveBuff || 0, 6);
+        ev(S, { t: 'ring', x: BW / 2, y: BH / 2, maxR: BW * 0.7, col: '#fde047' });
+        ev(S, { t: 'overdrive' });
+        break;
+      }
+      case 'rail': { // Lança Estelar: 3 linhas perfurantes cruzam o mapa
+        const st = getTowerStats(S, tower);
+        for (let l = 0; l < 3; l++) {
+          const ang = Math.PI * 2 * l / 3 + 0.4;
+          const dx = Math.cos(ang), dy = Math.sin(ang);
+          for (const e of alive()) {
+            const proj = (e.x - BW / 2) * dx + (e.y - BH / 2) * dy;
+            if (Math.abs(-(e.x - BW/2) * dy + (e.y - BH/2) * dx) < 30) damageEnemy(S, e, st.dmg * 5, { pure: true });
+          }
+          ev(S, { t: 'tracer', x1: BW / 2 - dx * BW, y1: BH / 2 - dy * BH, x2: BW / 2 + dx * BW, y2: BH / 2 + dy * BH, col: '#ffffff', w: 6 });
+        }
+        ev(S, { t: 'shake', mag: 12 });
+        break;
+      }
+    }
+    return true;
+  }
+
   function placeTower(S, c, r, towerId) {
+    if (towerId === 'factory') return placeFactory(S, c, r); // v3 PIXEL FASE 5
     const def = D.TOWERS_DATA.find(t => t.id === towerId);
     if (!def) return null;
     const key = c + ',' + r;
@@ -519,7 +739,13 @@
   function sellValue(t) { return Math.round(t.spent * 0.7); }
 
   function upgradeTower(S, t) {
-    if (!t || t.level >= D.TOWER_MAX_LVL) { SND.error(); return false; }
+    if (!t || t.level >= D.TOWER_MAX_LVL || t.defRef.kind === 'factory') { SND.error(); return false; }
+    // v3 PIXEL FASE 2: upgrade trava no teto do tier — precisa FUNDIR
+    if (t.level >= tierCap(t)) {
+      SND.error();
+      ev(S, { t: 'float', x: t.x, y: t.y - 16, txt: 'FUNDA 2 IGUAIS PRA SUBIR DE TIER', col: '#fbbf24', size: 10 });
+      return false;
+    }
     const cost = upgradeCost(t);
     if (S.credits < cost) { SND.error(); return false; }
     S.credits -= cost;
@@ -557,6 +783,82 @@
     t.targetMode = D.TARGET_MODES[(i + 1) % D.TARGET_MODES.length];
     SND.ui();
     return t.targetMode;
+  }
+
+  /* ---- v3 PIXEL FASE 2: tiers travam upgrade no teto; FUNDIR 3 iguais → sobe 1 tier ---- */
+  function tierCap(t) { return Math.min(5, D.getTier(t.level)) * 10; }
+  function mergeCandidates(S, t) {
+    const tier = D.getTier(t.level);
+    return S.towers.filter(o => o !== t && o.defRef.kind !== 'factory' && (o.defRef.id === t.defRef.id) && D.getTier(o.level) === tier);
+  }
+  function canMerge(S, t) {
+    if (!t || t.defRef.kind === 'factory' || t.level >= D.TOWER_MAX_LVL) return false;
+    return mergeCandidates(S, t).length >= 2;
+  }
+  function mergeTowers(S, t) {
+    if (!canMerge(S, t)) { SND.error(); return null; }
+    const tier = D.getTier(t.level);
+    const partsCost = D.MERGE_PARTS[tier] || 0;
+    if ((S.parts || 0) < partsCost) { SND.error(); ev(S, { t: 'float', x: t.x, y: t.y - 16, txt: 'PEÇAS INSUFICIENTES', col: '#f43f5e', size: 11 }); return null; }
+    const others = mergeCandidates(S, t).slice(0, 2);
+    if (others.length < 2) { SND.error(); return null; }
+    S.parts -= partsCost;
+    for (const o of others) sellTowerRaw(S, o); // consumidas SEM reembolso
+    t.level = tier * 10 + 1;
+    SND.upgrade();
+    ev(S, { t: 'banner', txt: defName(t) + ' FUNDIRAM → TIER ' + (tier + 1) + '!', col: '#fbbf24', strong: true });
+    ev(S, { t: 'ring', x: t.x, y: t.y, maxR: CELL * 3, col: '#fbbf24' });
+    ev(S, { t: 'lvlFx', x: t.x, y: t.y, col: '#fbbf24' });
+    unlockAchievement('max_tower');
+    return t;
+  }
+  function defName(t) { const d = t.defRef || t.def; return d ? d.name : ''; }
+  function sellTowerRaw(S, t) {
+    const i = S.towers.indexOf(t);
+    if (i >= 0) S.towers.splice(i, 1);
+    delete S.occupied[t.c + ',' + t.r];
+    ev(S, { t: 'boom', x: t.x, y: t.y, r: 20, col: '#8fa3c4', big: false });
+  }
+
+  /* ---- v3 PIXEL FASE 5: FÁBRICA + LABORATÓRIO HIVEMIND ---- */
+  function placeFactory(S, c, r) {
+    const fd = D.FACTORY_DATA;
+    const key = c + ',' + r;
+    if (S.occupied[key] || S.blocked[key]) { SND.error(); return null; }
+    if (c < 0 || c >= COLS || r >= ROWS || r < 0) return null;
+    if (S.credits < fd.cost) { SND.error(); return null; }
+    S.credits -= fd.cost;
+    const t = {
+      tid: uid(), defRef: fd, c, r,
+      x: c * CELL + CELL / 2, y: r * CELL + CELL / 2,
+      level: 1, spent: fd.cost, kills: 0, damageDealt: 0,
+      angle: -Math.PI / 2, aimAngle: -Math.PI / 2,
+      cooldown: 0, recoil: 0, flash: 0, rampTime: 0, lastTargetEid: null,
+      targetMode: 'FIRST', specBranch: null, beamTarget: null
+    };
+    S.towers.push(t);
+    S.occupied[key] = t;
+    SND.build();
+    ev(S, { t: 'buildFx', x: t.x, y: t.y, col: fd.color });
+    return t;
+  }
+  function upgradeFactory(S, t) {
+    if (!t || t.defRef.kind !== 'factory' || t.level >= D.FACTORY_DATA.maxLevel) { SND.error(); return false; }
+    const cc = D.FACTORY_DATA.upgradeCreditCost(t.level), pc = D.FACTORY_DATA.upgradePartsCost(t.level);
+    if (S.credits < cc || (S.parts || 0) < pc) { SND.error(); return false; }
+    S.credits -= cc; S.parts -= pc;
+    t.spent += cc; t.level++;
+    SND.upgrade();
+    ev(S, { t: 'lvlFx', x: t.x, y: t.y, col: D.FACTORY_DATA.color });
+    return true;
+  }
+  function upgradeEnemyHP(S) { // laboratório Hivemind: paga peças → inimigos +12% HP / +8% ouro por nível
+    const cost = D.HIVEMIND.cost(S.enemyHpLevel || 0);
+    if ((S.parts || 0) < cost) { SND.error(); return false; }
+    S.parts -= cost;
+    S.enemyHpLevel = (S.enemyHpLevel || 0) + 1;
+    ev(S, { t: 'banner', txt: '🧬 HIVEMIND NÍVEL ' + S.enemyHpLevel + ' — INIMIGOS +12% HP', col: '#a78bfa' });
+    return true;
   }
 
   /* ---- Fluxo de ondas ---- */
@@ -605,6 +907,17 @@
   }
 
   function onWaveCleared(S) {
+    // v3 PIXEL FASE 5: peças por onda + produção das fábricas
+    S.parts = (S.parts || 0) + 2;
+    let factoryParts = 0, factoryCredits = 0;
+    for (const t of S.towers) {
+      if (t.defRef.kind !== 'factory') continue;
+      const p = D.FACTORY_DATA.partsPerWave(t.level), cr = D.FACTORY_DATA.creditsPerWave(t.level);
+      S.parts += p; factoryParts += p;
+      S.credits += cr; S.creditsEarned += cr; factoryCredits += cr;
+      ev(S, { t: 'float', x: t.x, y: t.y - 20, txt: '+' + p + '⚙ +' + cr + 'cr', col: '#34d399', size: 12 });
+    }
+    if (factoryParts > 0) ev(S, { t: 'banner', txt: 'FÁBRICA: +' + factoryParts + '⚙ +' + factoryCredits + ' CRÉDITOS', col: '#34d399' });
     const bonus = Math.round((60 + S.wave * 15) * (S.endless ? 1.5 : 1) * (1 + (S.combo||0)*0.02));
     S.credits += bonus;
     S.creditsEarned += bonus;
@@ -823,6 +1136,10 @@
       if (t.flash > 0) t.flash -= dt;
       if (t.recoil > 0) t.recoil = Math.max(0, t.recoil - dt * 6);
 
+      // v3 PIXEL FASE 4: fila de supers automáticos — dispara sozinho quando cheio
+      if (def.kind !== 'factory' && def.kind !== 'buff') fireAutoSuperIfReady(S, t);
+      // v3 PIXEL FASE 5: fábrica não combate — pula alvo/tiro/buff
+      if (def.kind === 'factory') continue;
       const stats = getTowerStats(S, t);
       let da = t.aimAngle - t.angle;
       while (da > Math.PI) da -= Math.PI * 2;
@@ -835,20 +1152,26 @@
         const tgt = findBestTarget(S, t, stats);
         const prevId = t.beamTarget ? t.beamTarget.eid : null;
         t.beamTarget = (tgt && !tgt.dead) ? tgt : null;
+        // v3 PIXEL FASE 3: laser por tier — largura do feixe + alvos varridos
+        const lp = D.SHOT_PATTERNS.laser;
+        const beamTier = D.getTier(t.level);
+        const beamW = lp.width[beamTier - 1] || 1;
+        let sweepN = (lp.sweep[beamTier - 1] || 0);
+        if (t.specBranch === 'B' && def.specB && def.specB.prism) sweepN += def.specB.prism; // spec B vira base
+        if (D.TIER_LOGIC.laser && D.TIER_LOGIC.laser[beamTier] && D.TIER_LOGIC.laser[beamTier].eff.sweepAdd && beamTier >= 3) sweepN += 0; // já na tabela
         if (t.beamTarget) {
           t.aimAngle = Math.atan2(t.beamTarget.y - t.y, t.beamTarget.x - t.x);
           SND.laserStart('L' + t.tid);
           let dmgRate = stats.dmg;
           if (t.specBranch === 'A') { t.rampTime += dt; dmgRate *= 1 + Math.min(3.0, t.rampTime * 0.8); }
           damageEnemy(S, t.beamTarget, dmgRate * dt, { pure: true });
-          if (Math.random() < dt * 22) ev(S, { t: 'spark', x: t.beamTarget.x, y: t.beamTarget.y, col: def.color });
-          const specB = t.specBranch === 'B' && def.specB && def.specB.prism;
-          if (specB) {
+          if (sweepN > 0) {
+            // feixe varredor: atinge N alvos extras próximos do alvo principal
             let count = 0;
             for (const other of S.enemies) {
-              if (other !== t.beamTarget && !other.dead && Math.hypot(other.x - t.beamTarget.x, other.y - t.beamTarget.y) < 80) {
+              if (other !== t.beamTarget && !other.dead && Math.hypot(other.x - t.beamTarget.x, other.y - t.beamTarget.y) < 80 + beamW * 20) {
                 damageEnemy(S, other, dmgRate * 0.45 * dt, { pure: true });
-                if (++count >= def.specB.prism) break;
+                if (++count >= sweepN) break;
               }
             }
           }
@@ -936,8 +1259,18 @@
         for (const e of S.enemies) {
           if (!e.dead && !pr.hitIds[e.eid] && Math.hypot(e.x - pr.x, e.y - pr.y) < e.r + 4) {
             pr.hitIds[e.eid] = true;
-            damageEnemy(S, e, pr.dmg);
-            if (pr.stun && !e.dead) e.stunTimer = Math.max(e.stunTimer, pr.stun);
+            damageEnemy(S, e, pr.dmg, { src: pr.src || pr.tower });
+            // v3 PIXEL FASE 6: cannon T2 concussão — reduz 20% da velocidade 1.5s
+            if (!e.dead) {
+              const st2 = pr.src || pr.tower;
+              if (st2 && st2.defRef.id === 'cannon' && D.TIER_LOGIC.cannon[D.getTier(st2.level)] && D.TIER_LOGIC.cannon[D.getTier(st2.level)].eff.concuss) {
+                e.slowTimer = Math.max(e.slowTimer, 1.5); e.slowFactor = Math.min(e.slowFactor || 1, 0.8);
+              }
+              if (pr.stun) e.stunTimer = Math.max(e.stunTimer, pr.stun);
+              // v3 PIXEL FASE 6: gatling T2 incendiária
+              const gl = st2 && st2.defRef.id === 'gatling' ? D.TIER_LOGIC.gatling[D.getTier(st2.level)] : null;
+              if (gl && gl.eff.burn) { e.burnTimer = Math.max(e.burnTimer, gl.eff.burn); e.burnDps = pr.dmg * 0.3; }
+            }
             ev(S, { t: 'impact', x: pr.x, y: pr.y, col: pr.col });
             pr.pierce--;
             if (pr.pierce <= 0) { pr.life = 0; break; }
@@ -1001,8 +1334,20 @@
       if (e.dead || (e.flying && !pr.hitAir)) continue;
       const d = Math.hypot(e.x - x, e.y - y);
       if (d <= effSplash) {
-        damageEnemy(S, e, pr.dmg * (1 - (d / effSplash) * 0.5) * (1 + ((S.mutBuffs && S.mutBuffs.splash)||0)*0.3));
+        damageEnemy(S, e, pr.dmg * (1 - (d / effSplash) * 0.5) * (1 + ((S.mutBuffs && S.mutBuffs.splash)||0)*0.3), { src: pr.src || pr.tower });
         if (pr.burn && !e.dead) { e.burnTimer = 3; e.burnDps = pr.dmg * 0.25; }
+      }
+    }
+    // v3 PIXEL FASE 3: MIRV — ogiva se subdivide em submunições no impacto
+    if (pr.mirv > 0) {
+      for (let m = 0; m < pr.mirv; m++) {
+        S.projectiles.push({
+          kind: 'missile', x, y, targetId: null, speed: 260,
+          vx: Math.cos(Math.PI * 2 * m / pr.mirv + Math.random()) * 260,
+          vy: Math.sin(Math.PI * 2 * m / pr.mirv + Math.random()) * 260,
+          dmg: pr.dmg * 0.5, splash: effSplash * 0.6, hitAir: true, burn: false,
+          col: '#fb923c', life: 1.1, delay: 0, tower: pr.tower, mirv: 0, ang: 0
+        });
       }
     }
     pr.life = 0;
@@ -1308,7 +1653,8 @@
     D.TOWERS_DATA.forEach(def => {
       const col = Phaser.Display.Color.HexStringToColor(def.color).color;
       for (let lvl = 1; lvl <= D.TOWER_MAX_LVL; lvl++) {
-        mk('tur_' + def.id + '_' + lvl, 62 + Math.min(lvl, 14) * 2, g => {
+        if (lvl > 1) continue; // v3 PIXEL: só o legado nv1 fica; tiers vêm do PXART (tur_<id>_t<tier>)
+        mk('tur_' + def.id + '_1', 62 + Math.min(lvl, 14) * 2, g => {
           const S2 = 31 + Math.min(lvl, 14) * 1.0;
           const scale = 0.92 + Math.min(lvl, 30) * 0.016;
           g.save(); g.translateCanvas(S2, S2); g.scaleCanvas(scale, scale);
@@ -1440,6 +1786,9 @@
         const card = document.createElement('div');
         card.className = 'map-card chamf' + (locked ? ' locked' : '');
         card.dataset.idx = i;
+        card.dataset.theme = m.theme;
+        // tema define --tc via CSS [data-theme] e preview via paintPreview unificado
+        if(m.theme && window.TILES && window.TILES.THEMES[m.theme]) card.style.setProperty('--tc', window.TILES.THEMES[m.theme].accent);
         const stars = D.Save.data.mapStars[i] || 0;
         const cv = document.createElement('canvas');
         cv.width = 168; cv.height = 104;
@@ -1518,22 +1867,41 @@
     paintPreview(cv, map) {
       const c2 = cv.getContext('2d');
       const sx = cv.width / BW, sy = cv.height / BH;
-      c2.fillStyle = '#0a1128'; c2.fillRect(0, 0, cv.width, cv.height);
-      c2.strokeStyle = 'rgba(56,189,248,0.10)';
-      for (let x = 0; x <= cv.width; x += cv.width / 10) { c2.beginPath(); c2.moveTo(x, 0); c2.lineTo(x, cv.height); c2.stroke(); }
-      for (let y = 0; y <= cv.height; y += cv.height / 6) { c2.beginPath(); c2.moveTo(0, y); c2.lineTo(cv.width, y); c2.stroke(); }
-      const cols = ['#38bdf8', '#34d399', '#fb923c'];
-      map.routes.forEach((wps, ri) => {
-        c2.strokeStyle = cols[ri % cols.length]; c2.lineWidth = 3; c2.lineJoin = 'round';
-        c2.globalAlpha = 0.85;
-        c2.beginPath();
-        wps.forEach((w, i) => {
-          const x = w[0] * CELL * sx + CELL * sx / 2, y = w[1] * CELL * sy + CELL * sy / 2;
-          if (i === 0) c2.moveTo(Math.max(-4, x), y); else c2.lineTo(x, y);
+      // MAPA NOVO PIXEL ART: fundo em tiles 44px + path em blocos 44x44 (mesma identidade das torres/inimigos)
+      const themeInfo = (window.TILES && window.TILES.THEMES[map.theme]) ? window.TILES.THEMES[map.theme] : { bg:'#0a1128', accent:'#38bdf8' };
+      c2.fillStyle = themeInfo.bg || '#0a1128'; c2.fillRect(0, 0, cv.width, cv.height);
+      c2.fillStyle = '#050914'; c2.globalAlpha = 0.35; c2.fillRect(0,0,cv.width,cv.height); c2.globalAlpha = 1;
+      // grid pixel 1px a cada célula
+      c2.strokeStyle = 'rgba(56,189,248,0.08)'; c2.lineWidth = 1;
+      for(let c=0;c<=COLS;c++){ const x=c*CELL*sx; c2.beginPath(); c2.moveTo(x,0); c2.lineTo(x,cv.height); c2.stroke(); }
+      for(let r=0;r<=ROWS;r++){ const y=r*CELL*sy; c2.beginPath(); c2.moveTo(0,y); c2.lineTo(cv.width,y); c2.stroke(); }
+      // path em blocos pixel art: cada célula bloqueada desenhada como tile #0d1526 com borda accent
+      try{
+        const blocked = D.getPathBlockedCells(map.routes);
+        const accent = themeInfo.accent || '#38bdf8';
+        for(const k in blocked){
+          const parts=k.split(','); const c=parseInt(parts[0],10), r=parseInt(parts[1],10);
+          if(c<0||c>=COLS||r<0||r>=ROWS) continue;
+          const x=c*CELL*sx, y=r*CELL*sy, w=CELL*sx, h=CELL*sy;
+          c2.fillStyle = '#0d1526'; c2.fillRect(x+0.5,y+0.5,w-1,h-1);
+          c2.strokeStyle = accent; c2.globalAlpha = 0.22; c2.lineWidth = 1; c2.strokeRect(x+0.5,y+0.5,w-1,h-1); c2.globalAlpha = 1;
+          // detalhe central 2x2 pixels
+          c2.fillStyle = accent; c2.globalAlpha = 0.18; c2.fillRect(x+w/2-1, y+h/2-1, 2,2); c2.globalAlpha = 1;
+        }
+      }catch(e){
+        // fallback vetorial antigo se blocked falhar
+        const baseAccent = themeInfo.accent || '#38bdf8';
+        map.routes.forEach((wps, ri) => {
+          c2.strokeStyle = baseAccent; c2.lineWidth = 2; c2.globalAlpha = 0.7;
+          c2.beginPath();
+          wps.forEach((w, i) => {
+            const x = w[0] * CELL * sx + CELL * sx / 2, y = w[1] * CELL * sy + CELL * sy / 2;
+            if (i === 0) c2.moveTo(Math.max(-4, x), y); else c2.lineTo(x, y);
+          });
+          c2.stroke();
         });
-        c2.stroke();
-      });
-      c2.globalAlpha = 1;
+        c2.globalAlpha = 1;
+      }
     },
 
     refresh() {
@@ -1687,7 +2055,50 @@
         card.className = 'codex-card chamf' + (def.isBoss ? ' boss' : '');
         const cv = document.createElement('canvas'); cv.width = 64; cv.height = 64;
         const c2 = cv.getContext('2d');
-        c2.save(); c2.translate(32, 32); paintEnemyShape2d(c2, def.shape, def.col, def.r * 1.4); c2.restore();
+        // IDENTIDADE UNIFICADA: usa sprite pixel 'en_<type>' (mesma arte do jogo) em vez de vetorial
+        let drew = false;
+        try {
+          const scene = this.scene || (window.__game && window.__game.scene && window.__game.scene.getScene('Menu')) || null;
+          if (scene && scene.textures && scene.textures.exists('en_' + type)) {
+            const tex = scene.textures.get('en_' + type);
+            const src = tex.getSourceImage();
+            if (src && src.width) {
+              c2.imageSmoothingEnabled = false;
+              const scale = Math.min(56 / src.width, 56 / src.height);
+              const w = src.width * scale, h = src.height * scale;
+              c2.drawImage(src, 32 - w / 2, 32 - h / 2, w, h);
+              drew = true;
+            }
+          }
+          if (!drew && window.PXART && window.PXART.ENEMY_ART) {
+            const artMap = window.PXART.ENEMY_ART;
+            let art = artMap[type];
+            if (!art) {
+              const baseT = (def.variantOf || type.split('_')[0]);
+              art = artMap[baseT] || artMap.drone;
+            }
+            if (art) {
+              const pal = window.PXART.enemyPalette ? window.PXART.enemyPalette(def.col) : { K: '#000000', W: '#ffffff', G: '#bfe3ff', M: '#8b95a8', C: def.col, D: def.col, L: def.col, E: def.col, R: '#f43f5e', Y: '#fbbf24', P: '#a78bfa', N: '#34d399', B: '#60a5fa', O: '#f97316' };
+              const PX = (window.TOKENS && window.TOKENS.PIXEL && window.TOKENS.PIXEL.PX) || 3;
+              let maxW = 0; for (const r of art) maxW = Math.max(maxW, r.length);
+              const pxW = maxW * PX, pxH = art.length * PX;
+              const offX = Math.floor((64 - pxW) / 2), offY = Math.floor((64 - pxH) / 2);
+              for (let y = 0; y < art.length; y++) {
+                const row = art[y];
+                for (let x = 0; x < row.length; x++) {
+                  const ch = row[x];
+                  if (ch === ' ' || ch === '.') continue;
+                  const c = pal[ch];
+                  if (!c) continue;
+                  c2.fillStyle = c;
+                  c2.fillRect(offX + x * PX, offY + y * PX, PX, PX);
+                }
+              }
+              drew = true;
+            }
+          }
+        } catch (e) {}
+        if (!drew) { c2.save(); c2.translate(32, 32); paintEnemyShape2d(c2, def.shape, def.col, def.r * 1.4); c2.restore(); }
         const traits = [];
         if (def.flying) traits.push('VOADOR \u26a0 anti-aéreo necessário');
         if (def.stealth) traits.push('Camuflagem cíclica');
@@ -1763,7 +2174,17 @@
     'asteroid-field': { base: 0x0b1220, accent: '#94a3b8' },
     'solar-furnace': { base: 0x14090c, accent: '#fb923c' },
     'ion-nebula': { base: 0x081420, accent: '#22d3ee' },
-    'singularity': { base: 0x07040e, accent: '#f43f5e' }
+    'singularity': { base: 0x07040e, accent: '#f43f5e' },
+    // Sistema Solar temático — 8 planetas + luas
+    'mercury': { base: 0x1a1208, accent: '#f59e0b' },
+    'venus': { base: 0x1a0f08, accent: '#fbbf24' },
+    'mars': { base: 0x1a0a08, accent: '#f43f5e' },
+    'luna': { base: 0x0f1420, accent: '#94a3b8' },
+    'europa': { base: 0x0a1a2a, accent: '#38bdf8' },
+    'titan': { base: 0x140f1a, accent: '#f59e0b' },
+    'uranus': { base: 0x0a1a2a, accent: '#22d3ee' },
+    'triton': { base: 0x0a0f1e, accent: '#38bdf8' },
+    'solar-system': { base: 0x020617, accent: '#a78bfa' }
   };
 
   class GameScene extends Phaser.Scene {
@@ -1822,29 +2243,50 @@
     /* ---------- construção estática ---------- */
     buildStatic() {
       const theme = THEME_BG[this.S.map.theme] || THEME_BG['space-station'];
+      // FUNDO base navy
       this.add.rectangle(BW / 2, BH / 2, BW, BH, theme.base);
+      // MAPA NOVO PIXEL ART: fundo em tiles 44x44 por tema (mesma identidade das torres/inimigos)
+      const mapTheme = this.S.map.theme;
+      const bgTileKey = 'tile_bg_' + mapTheme;
+      const bgTileAlt = 'tile_' + mapTheme + '_a';
+      const bgKey = (this.textures.exists(bgTileKey) ? bgTileKey : (this.textures.exists(bgTileAlt) ? bgTileAlt : null));
+      if(bgKey){
+        this.bgTile = this.add.tileSprite(BW/2, BH/2, BW, BH, bgKey).setDepth(0).setAlpha(0.95);
+        // pixel crisp: desativa suavização
+        if(this.bgTile.setTileScale) this.bgTile.setTileScale(1);
+      }
       const g = this.make.graphics({ add: false });
       g.fillStyle(0xffffff, 1);
       for (let i = 0; i < 70; i++) g.fillCircle(Math.random() * BW, Math.random() * BH, Math.random() < 0.9 ? 1 : 2);
       g.generateTexture('bgstars', BW, BH); g.destroy();
-      this.add.image(BW / 2, BH / 2, 'bgstars').setAlpha(0.35);
+      this.add.image(BW / 2, BH / 2, 'bgstars').setAlpha(0.35).setDepth(1);
 
-      this.gridGfx = this.add.graphics();
-      this.gridGfx.lineStyle(1, 0x38bdf8, 0.05);
+      // GRID pixel art: linhas 1px a cada 44px com alpha .06 (snap inteiro)
+      this.gridGfx = this.add.graphics().setDepth(2);
+      this.gridGfx.lineStyle(1, 0x38bdf8, 0.06);
       for (let c = 0; c <= COLS; c++) { this.gridGfx.lineBetween(c * CELL, 0, c * CELL, BH); }
       for (let r = 0; r <= ROWS; r++) { this.gridGfx.lineBetween(0, r * CELL, BW, r * CELL); }
 
-      this.routeGfx = this.add.graphics();
+      // ROTA PIXEL ART: blocos 44x44 por célula bloqueada (mesmo material das torres) — DEPTH BAIXO (atrás dos inimigos)
+      this.pathTiles = [];
+      const pathKey = 'tile_path_' + mapTheme;
+      const hasPathTile = this.textures.exists(pathKey);
+      if(hasPathTile){
+        for(const k in this.S.blocked){
+          const parts = k.split(','); const c = parseInt(parts[0],10), r = parseInt(parts[1],10);
+          if(c<0||c>=COLS||r<0||r>=ROWS) continue;
+          const t = this.add.image(c*CELL + CELL/2, r*CELL + CELL/2, pathKey).setDepth(2).setAlpha(0.92);
+          this.pathTiles.push(t);
+        }
+      }
+      // Mantém routeGfx vetorial como overlay sutil para bordas (agora mais fino, pixel snap) — também atrás dos inimigos
+      this.routeGfx = this.add.graphics().setDepth(3);
       const accent = Phaser.Display.Color.HexStringToColor(theme.accent).color;
       this.S.routes.forEach(pts => {
-        this.routeGfx.lineStyle(CELL * 0.62, 0x0d1526, 0.95);
-        this.drawPath(this.routeGfx, pts);
-        this.routeGfx.lineStyle(CELL * 0.52, 0x111f38, 1);
-        this.drawPath(this.routeGfx, pts);
-        this.routeGfx.lineStyle(1.5, accent, 0.28);
+        this.routeGfx.lineStyle(1.5, accent, 0.22);
         this.drawPath(this.routeGfx, pts);
       });
-      this.dashGfx = this.add.graphics();
+      this.dashGfx = this.add.graphics().setDepth(4);
       this.dashOffset = 0;
 
       // Portal base (saída)
@@ -1964,6 +2406,13 @@
           '<div class="sc-body"><div class="sc-name">' + def.name + '</div>' +
           '<div class="sc-cost">$' + def.cost + '</div></div>';
         const dps = def.kind === 'beam' ? '~' + def.dmg + '/s' : (def.rate ? '~' + Math.round(def.dmg * def.rate) + ' DPS' : 'suporte');
+        // v3 PIXEL FASE 6: secao LOGICA DE TIER no tooltip da loja
+        let tierTip = '';
+        const tl = D.TIER_LOGIC[def.id] || {};
+        [2, 3, 4, 5].forEach(tr => {
+          if (tl[tr]) tierTip += '<span style="color:' + (tr >= 4 ? '#fbbf24' : '#8fa3c4') + '">T' + tr + ':</span> ' + tl[tr].name + ' — ' + tl[tr].desc + '<br>';
+        });
+        const superTip = D.SUPERS_AUTO[def.id] ? '<br><b style="color:#fde047">★ SUPER AUTO:</b> ' + D.SUPERS_AUTO[def.id].name + ' — ' + D.SUPERS_AUTO[def.id].desc + '<br>' : '';
         const tipHtml =
           '<b style="color:' + def.color + '">' + def.name + '</b><br>' +
           '<span class="tt-muted">' + def.desc + '</span><br>' +
@@ -1971,7 +2420,9 @@
           (def.rate ? ' • CADÊNCIA ' + def.rate + '/s' : '') + '<br>' +
           '<b>' + dps + '</b>' + (def.splash ? ' • ÁREA ' + def.splash : '') + '<br>' +
           '<span class="tt-good">Nv4\u25B8A:</span> ' + def.specA.name + ' \u2014 ' + def.specA.desc + '<br>' +
-          '<span class="tt-good">Nv4\u25B8B:</span> ' + def.specB.name + ' \u2014 ' + def.specB.desc;
+          '<span class="tt-good">Nv4\u25B8B:</span> ' + def.specB.name + ' \u2014 ' + def.specB.desc + '<br>' +
+          '<div style="margin-top:4px;padding-top:3px;border-top:1px solid #334155"><b style="color:#38bdf8">LÓGICA DE TIER</b><br>' + tierTip + '</div>' +
+          superTip;
         this.bindTip(card, tipHtml);
         card.addEventListener('click', () => {
           SND.ui();
@@ -1982,6 +2433,32 @@
         });
         bar.appendChild(card);
       });
+      // v3 PIXEL FASE 5: card PRÓPRIO da Fábrica (borda verde, recurso peças)
+      (() => {
+        const fd = D.FACTORY_DATA;
+        const card = document.createElement('div');
+        card.className = 'shop-card chamf';
+        card.style.setProperty('--tc', fd.color);
+        card.style.borderColor = '#34d399';
+        card.dataset.id = 'factory';
+        card.innerHTML =
+          '<div class="sc-icon" style="color:' + fd.color + '">⚙</div>' +
+          '<div class="sc-body"><div class="sc-name" style="color:#34d399">' + fd.name + '</div>' +
+          '<div class="sc-cost">$' + fd.cost + '</div></div>';
+        this.bindTip(card,
+          '<b style="color:#34d399">' + fd.name + '</b><br>' +
+          '<span class="tt-muted">' + fd.desc + '</span><br>' +
+          'POR ONDA COMPLETA: <b>+10⚙ +$18</b> × nível<br>' +
+          'NÃO combate • Upgrades com créditos + peças • Venda 70%');
+        card.addEventListener('click', () => {
+          SND.ui();
+          if (this.S.credits < fd.cost) { SND.error(); return; }
+          this.placingId = (this.placingId === 'factory') ? null : 'factory';
+          this.selected = null;
+          this.refreshShopSel();
+        });
+        bar.appendChild(card);
+      })();
     }
 
     refreshShopSel() {
@@ -2027,13 +2504,18 @@
       const panel = this.el('tower-panel');
       panel.classList.remove('hidden');
       const def = t.defRef;
+      // v3 PIXEL FASE 5: painel próprio da fábrica
+      if (def.kind === 'factory') return this.showFactoryPanel(t);
       const stats = getTowerStats(this.S, t);
+      // v3 PIXEL FASE 2/6: badge de tier no painel
+      const tierBadge = '<span style="font-family:JetBrains Mono;font-size:10px;font-weight:800;color:' +
+        (D.getTier(t.level) >= 5 ? '#fbbf24' : '#38bdf8') + ';margin-left:6px">T' + D.getTier(t.level) + (t.level >= D.TOWER_MAX_LVL ? ' MESTRE ★' : '') + '</span>';
       this.el('tp-icon').textContent = def.icon;
       this.el('tp-icon').style.color = def.color;
       this.el('tp-name').textContent = def.name;
       // ULTRA: mostra nível 1-50 como número + barra + tier dots
       const pct = Math.round(t.level / D.TOWER_MAX_LVL * 100);
-      this.el('tp-level').innerHTML = '<span style="font-family:JetBrains Mono;font-size:10px;font-weight:800;color:var(--gold);margin-right:6px">NV '+t.level+'/'+D.TOWER_MAX_LVL+'</span><span style="font-size:9px;color:var(--muted)">'+pct+'%</span>';
+      this.el('tp-level').innerHTML = '<span style="font-family:JetBrains Mono;font-size:10px;font-weight:800;color:var(--gold);margin-right:6px">NV '+t.level+'/'+D.TOWER_MAX_LVL+'</span><span style="font-size:9px;color:var(--muted)">'+pct+'%</span>' + tierBadge;
       this.el('tp-stats').innerHTML =
         '<div><span>DANO</span><b>' + Math.round(stats.dmg) + (def.kind === 'beam' ? '/s' : '') + '</b></div>' +
         '<div><span>ALCANCE</span><b>' + Math.round(stats.rng) + '</b></div>' +
@@ -2058,18 +2540,85 @@
         specBox.innerHTML = '<div class="spec-chosen tt-muted">Especializações desbloqueiam no nível 4.</div>';
       }
       const up = this.el('tp-upgrade');
-      if (t.level >= D.TOWER_MAX_LVL) { up.textContent = 'NÍVEL MÁXIMO • 50'; up.disabled = true; }
+      const tier = D.getTier(t.level);
+      const isFactory = def.kind === 'factory';
+      if (!isFactory && t.level >= tierCap(t)) {
+        // v3 PIXEL FASE 2: botão vira FUNDIR no teto do tier
+        const cands = mergeCandidates(this.S, t);
+        const partsCost = D.MERGE_PARTS[tier] || 0;
+        const ok = cands.length >= 2 && (this.S.parts || 0) >= partsCost;
+        up.textContent = 'FUNDIR (2/3: ' + cands.length + ') • ' + partsCost + '⚙';
+        up.disabled = !ok;
+        up.title = 'Consome esta torre + 2 iguais do mesmo tier → T' + (tier + 1) + ' nv ' + (tier * 10 + 1);
+      } else if (isFactory) {
+        const pc = D.FACTORY_DATA.upgradePartsCost(t.level), cc = D.FACTORY_DATA.upgradeCreditCost(t.level);
+        if (t.level >= D.FACTORY_DATA.maxLevel) { up.textContent = 'FÁBRICA NO MÁXIMO • NV5'; up.disabled = true; }
+        else { up.textContent = 'MELHORAR • $' + cc + ' + ' + pc + '⚙'; up.disabled = this.S.credits < cc || (this.S.parts || 0) < pc; }
+      } else if (t.level >= D.TOWER_MAX_LVL) { up.textContent = 'NÍVEL MÁXIMO • 50'; up.disabled = true; }
       else {
         const cost = upgradeCost(t);
-        up.textContent = 'MELHORAR \u2022 $' + cost;
+        up.textContent = 'MELHORAR • $' + cost;
         up.disabled = this.S.credits < cost;
       }
       this.el('tp-sell').textContent = 'VENDER \u2022 $' + sellValue(t);
+      // v3 PIXEL FASE 6: seção LÓGICA DE TIER (ativa + próximas) e carga do super
+      (() => {
+        const tier = D.getTier(t.level);
+        const tl = D.TIER_LOGIC[def.id] || {};
+        const box = document.createElement('div');
+        box.style.cssText = 'margin-top:6px;padding:6px 8px;background:rgba(56,189,248,.06);border:1px solid rgba(56,189,248,.16);font-size:11px;line-height:1.45';
+        let html = '<div style="color:#38bdf8;font-weight:700;margin-bottom:3px">⬢ LÓGICA DE TIER</div>';
+        [2, 3, 4, 5].forEach(tr => {
+          if (!tl[tr]) return;
+          const on = tr <= tier;
+          html += '<div style="color:' + (on ? '#34d399' : '#8fa3c4') + '">' + (on ? '✔' : '○') + ' <b>T' + tr + '</b> — ' + tl[tr].name + ': ' + tl[tr].desc + '</div>';
+        });
+        const sa = D.SUPERS_AUTO[def.id];
+        if (sa) {
+          const sc = getSuperCharge(this.S, t);
+          html += '<div style="color:#fde047;margin-top:3px">★ SUPER AUTO: ' + sa.name + ' (' + Math.round(sc.pct * 100) + '%)</div>';
+        }
+        box.innerHTML = html;
+        const specBox2 = this.el('tp-specs');
+        const old = specBox2.querySelector('.tierlogic-info');
+        if (old) old.remove();
+        box.className = 'tierlogic-info';
+        specBox2.appendChild(box);
+      })();
     }
 
     hideTowerPanel() {
       const panel = this.el('tower-panel');
       if (panel) panel.classList.add('hidden');
+    }
+
+    /* v3 PIXEL FASE 5: painel da fábrica (produção + próximo nível) */
+    showFactoryPanel(t) {
+      const el = this.el.bind(this);
+      const fd = D.FACTORY_DATA;
+      el('tp-icon').textContent = '⚙';
+      el('tp-icon').style.color = fd.color;
+      el('tp-name').textContent = fd.name;
+      const pct = Math.round(t.level / fd.maxLevel * 100);
+      el('tp-level').innerHTML = '<span style="font-family:JetBrains Mono;font-size:10px;font-weight:800;color:#34d399;margin-right:6px">FÁBRICA NV ' + t.level + '/' + fd.maxLevel + '</span><span style="font-size:9px;color:var(--muted)">' + pct + '%</span>';
+      const p = fd.partsPerWave(t.level), cr = fd.creditsPerWave(t.level);
+      const np = fd.partsPerWave(t.level + 1), ncr = fd.creditsPerWave(t.level + 1);
+      el('tp-stats').innerHTML =
+        '<div><span>PRODUZ/ONDA</span><b style="color:#34d399">+' + p + '⚙ +$' + cr + '</b></div>' +
+        '<div><span>PRÓX. NÍVEL</span><b style="color:var(--muted)">+' + np + '⚙ +$' + ncr + '</b></div>' +
+        '<div><span>VENDA</span><b>$' + sellValue(t) + '</b></div>' +
+        '<div><span>MODO</span><b style="color:var(--muted)">industrial</b></div>';
+      el('tp-target').textContent = '◇ SEM ALVO';
+      const specBox = el('tp-specs');
+      specBox.innerHTML = '<div class="spec-chosen tt-muted">Prédio industrial: paga a conta com peças ⚙ para FUNDIR torres e ligar o laboratório Hivemind.</div>';
+      const up = el('tp-upgrade');
+      if (t.level >= fd.maxLevel) { up.textContent = 'FÁBRICA NO MÁXIMO • NV5'; up.disabled = true; }
+      else {
+        const cc = fd.upgradeCreditCost(t.level), pc2 = fd.upgradePartsCost(t.level);
+        up.textContent = 'MELHORAR • $' + cc + ' + ' + pc2 + '⚙';
+        up.disabled = this.S.credits < cc || (this.S.parts || 0) < pc2;
+      }
+      el('tp-sell').textContent = 'VENDER • $' + sellValue(t);
     }
 
     bindTip(el, html) {
@@ -2135,14 +2684,41 @@
         SND.ui();
       });
       this.el('btn-pause').addEventListener('click', () => this.togglePause());
+      // mobile — próxima onda sem teclado
+      const nextMob = this.el('btn-nextwave-mobile');
+      if(nextMob) nextMob.addEventListener('click', () => { if(this.S.state === 'idle') { SND.ui(); startNextWave(this.S); } else { SND.error(); } });
       // mute handled globally (HTML) to avoid double toggle
       this.el('btn-home').addEventListener('click', () => { SND.uiBack(); this.goMenu(); });
+      // v3 PIXEL FASE 5: botão laboratório Hivemind no topbar
+      const hiveBtn = this.el('btn-hivemind');
+      if (hiveBtn) hiveBtn.addEventListener('click', () => { upgradeEnemyHP(this.S); });
       this.el('btn-resume').addEventListener('click', () => this.togglePause());
       this.el('btn-quit').addEventListener('click', () => { this.paused = false; this.goMenu(); });
-      this.el('tp-upgrade').addEventListener('click', () => { if (this.selected) { upgradeTower(this.S, this.selected); this.showTowerPanel(this.selected); } });
+      this.el('tp-upgrade').addEventListener('click', () => {
+        if (!this.selected) return;
+        const t = this.selected;
+        if (t.defRef.kind === 'factory') { upgradeFactory(this.S, t); }
+        else if (t.level >= tierCap(t)) { mergeTowers(this.S, t); } // v3 PIXEL FASE 2
+        else { upgradeTower(this.S, t); }
+        this.showTowerPanel(this.selected);
+      });
       this.el('tp-sell').addEventListener('click', () => { if (this.selected) { sellTower(this.S, this.selected); this.selected = null; this.hideTowerPanel(); } });
       this.el('tp-target').addEventListener('click', () => { if (this.selected) { cycleTargetMode(this.selected); this.showTowerPanel(this.selected); } });
       this.el('tp-close').addEventListener('click', () => { this.selected = null; this.hideTowerPanel(); });
+      // BUG 2 FIX: tap/click on tower-panel background (not on a button) closes panel
+      var tpEl = this.el('tower-panel');
+      if (tpEl) {
+        tpEl.addEventListener('pointerdown', function(e) {
+          // only close if tapped directly on panel bg or non-interactive child, NOT on a button
+          if (e.target.closest('button') || e.target.closest('.spec-btn')) return;
+          // defer so existing button click handlers still fire
+          var self2 = this;
+          setTimeout(function() {
+            var sc = window.__game && window.__game.scene.getScene('Game');
+            if (sc) { sc.selected = null; sc.hideTowerPanel(); }
+          }, 60);
+        });
+      }
       ['modal-end'].forEach(id => {
         const b = this.el('btn-retry');
         if (b) b.addEventListener('click', () => { SND.ui(); this.restartSame(); });
@@ -2221,8 +2797,13 @@
       this.syncProjectiles();
       this.syncHud();
       this.syncBossBar();
+      // v3 PIXEL FASE 2: painel só fica aberto se a torre ainda existir (evita painel fantasma sobre os supers)
+      if (this.selected && !this.S.towers.includes(this.selected)) { this.selected = null; this.hideTowerPanel(); }
       this.pollFloats(dt);
     }
+
+    /* v3 PIXEL FASES 2-6: helpers de teste headless */
+    get testPanelOpen() { const p = this.el('tower-panel'); return !!p && !p.classList.contains('hidden'); }
 
     consumeEvents() {
       for (const e of this.S.events) this.handleEvent(e);
@@ -2292,6 +2873,16 @@
           break;
         }
         case 'buildFx': this.spark(e.x, e.y, e.col, 10, 120, 0.4); break;
+        case 'autoSuperFx': { // v3 PIXEL FASE 4: FX dramático do super automático (decai mesmo pausado)
+          const ring = this.getImg('ring');
+          ring.setTexture('ring').setTint(Phaser.Display.Color.HexStringToColor(e.col).color)
+            .setPosition(e.x, e.y).setScale(0.3).setAlpha(0.95);
+          ring.setData('life', 0.7); ring.setData('tot', 0.7);
+          ring.setData('vx', 0); ring.setData('vy', 0); ring.setData('grow', 9);
+          if (!ring._inLayer) { this.fxOver.add(ring); ring._inLayer = true; }
+          this.spark(e.x, e.y, e.col, 18, 220, 0.6);
+          break;
+        }
         case 'lvlFx': {
           this.spark(e.x, e.y, '#fbbf24', 12, 140, 0.5);
           this.floatTxt(e.x, e.y - 20, 'N\u00CDVEL UP!', '#fbbf24', 13);
@@ -2467,7 +3058,8 @@
         ui.strokeRect(this.selected.c * CELL + 2, this.selected.r * CELL + 2, CELL - 4, CELL - 4);
       }
       if (this.placingId) {
-        const def = D.TOWERS_DATA.find(d => d.id === this.placingId);
+        const def = D.TOWERS_DATA.find(d => d.id === this.placingId) || (this.placingId === 'factory' ? Object.assign({ rng: 70 }, D.FACTORY_DATA) : null); // v3 PIXEL FASE 5
+        if (!def) { this.placingId = null; return; }
         const c = this.hoverCell.c, r = this.hoverCell.r;
         if (c >= 0 && c < COLS && r >= 0 && r < ROWS) {
           const cx = c * CELL + CELL / 2, cy = r * CELL + CELL / 2;
@@ -2486,6 +3078,17 @@
         ui.strokeCircle(this.pointerWorld.x, this.pointerWorld.y, meta.radius);
         ui.fillStyle(Phaser.Display.Color.HexStringToColor(meta.color).color, 0.06);
         ui.fillCircle(this.pointerWorld.x, this.pointerWorld.y, meta.radius);
+      }
+      // v3 PIXEL FASE 4: anel fino de progresso do super automático ao redor de cada torre
+      for (const t of this.S.towers) {
+        if (t.defRef.kind === 'factory') continue;
+        const sc = getSuperCharge(this.S, t);
+        if (sc.pct <= 0 || sc.pct >= 1) continue;
+        const col = Phaser.Display.Color.HexStringToColor((D.SUPERS_AUTO[t.defRef.id] || {}).col || '#fbbf24').color;
+        ui.lineStyle(2, col, 0.55);
+        ui.beginPath();
+        ui.arc(t.x, t.y, CELL * 0.52, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * sc.pct);
+        ui.strokePath();
       }
     }
 
@@ -2513,7 +3116,7 @@
         seen[e.eid] = true;
         let v = this.enemyViews[e.eid];
         if (!v) {
-          const root = this.add.container(e.x, e.y);
+          const root = this.add.container(e.x, e.y).setDepth(10);
           const body = this.add.image(0, 0, 'en_' + e.type);
           const hpBg = this.add.image(0, e.r + 6, 'px').setTint(0x000000).setAlpha(0.6).setDisplaySize(e.r * 2.4, 4);
           const hpFg = this.add.image(0, e.r + 6, 'px').setDisplaySize(e.r * 2.4, 4);
@@ -2549,12 +3152,20 @@
     syncTowers() {
       for (const t of this.S.towers) {
         let v = this.towerViews[t.tid];
+        const tkey = t.defRef.kind === 'factory'
+          ? 'px_factory_l' + Math.min(5, t.level)
+          : 'tur_' + t.defRef.id + '_t' + D.getTier(t.level); // v3 PIXEL: tier/factory texture
+        if (!v || v.lastTexKey !== tkey) {
+          if (v && v.lastTexKey !== tkey && this.textures.exists(tkey)) { v.tur.setTexture(tkey); v.lastTexKey = tkey; }
+        }
         if (!v) {
           const base = this.add.image(t.x, t.y, 'tbase').setVisible(false).setAlpha(0); // borda removida
-          const tur = this.add.image(t.x, t.y, 'tur_' + t.defRef.id + '_' + t.level);
+          const tur = this.add.image(t.x, t.y, this.textures.exists(tkey) ? tkey : ('tur_' + t.defRef.id + '_1'));
           const pips = this.add.container(t.x, t.y + 15);
           base.setDepth(30); tur.setDepth(31); pips.setDepth(32);
           v = { base, tur, pips, lastLevel: t.level };
+          v.lastTexKey = this.textures.exists(tkey) ? tkey : null; // v3 PIXEL
+          v.tur.baseScale = [1, 1, 1.08, 1.18, 1.30, 1.45][D.getTier(t.level)] || 1;
           this.towerViews[t.tid] = v;
           this.buildPips(v, t);
         }
@@ -2567,10 +3178,27 @@
         v.tur.setScale(1 + (t.recoil || 0) * 0.12);
         if (t.flash > 0) v.tur.setTintFill(0xffffff); else v.tur.clearTint();
         if (t.level !== v.lastLevel) {
-          // Troca pra textura do novo nível (mais forte e maior visualmente)
-          const key = 'tur_' + t.defRef.id + '_' + t.level;
-          if (this.textures.exists(key)) { v.tur.setTexture(key); }
+          // v3 PIXEL: troca textura por TIER (escala visual 1.0/1.08/1.18/1.30/1.45)
+          const tk = 'tur_' + t.defRef.id + '_t' + D.getTier(t.level);
+          if (this.textures.exists(tk)) { v.tur.setTexture(tk); v.lastTexKey = tk; }
+          const tierScale = [1, 1, 1.08, 1.18, 1.30, 1.45][D.getTier(t.level)] || 1;
+          v.tur.baseScale = tierScale;
           v.lastLevel = t.level; this.buildPips(v, t);
+        }
+        v.tur.setScale((v.tur.baseScale || 1) * (1 + (t.recoil || 0) * 0.12));
+      }
+      // FIX: remove visual remanescente de naves consumidas no merge/venda (estava deixando fantasma)
+      for (const tid in this.towerViews) {
+        const stillExists = this.S.towers.some(t => String(t.tid) === String(tid));
+        if (!stillExists) {
+          const v = this.towerViews[tid];
+          try{ if(v.base) v.base.destroy(); }catch(e){}
+          try{ if(v.tur) v.tur.destroy(); }catch(e){}
+          try{ if(v.pips) v.pips.destroy(true); }catch(e){}
+          try{ if(v.ultraGlow) v.ultraGlow.destroy(); }catch(e){}
+          try{ if(v.odFlame) v.odFlame.destroy(); }catch(e){}
+          try{ if(v.aura) v.aura.destroy(); }catch(e){}
+          delete this.towerViews[tid];
         }
       }
     }
@@ -2626,6 +3254,19 @@
         l.textContent = '\u25C8 ' + S.lives;
         if (down) { l.classList.remove('blink'); void l.offsetWidth; l.classList.add('blink'); }
       }
+      // v3 PIXEL FASE 5: HUD de peças ⚙
+      if ((S.parts || 0) !== (this._lastParts || -1)) {
+        this._lastParts = S.parts || 0;
+        const pEl = el('hud-parts');
+        if (pEl) pEl.textContent = String(this._lastParts);
+      }
+      // v3 PIXEL FASE 5: botão laboratório Hivemind
+      const hiveBtn = el('btn-hivemind');
+      if (hiveBtn) {
+        const cost = D.HIVEMIND.cost(S.enemyHpLevel || 0);
+        hiveBtn.textContent = '🧬 HP ×' + (1 + (S.enemyHpLevel || 0) * D.HIVEMIND.hpAdd).toFixed(2) + ' (+' + cost + '⚙)';
+        hiveBtn.disabled = (S.parts || 0) < cost;
+      }
       el('hud-wave-num').textContent = String(Math.max(1, S.wave));
       const num2 = el('hud-wave-num2');
       if (num2) num2.textContent = String(Math.max(1, S.wave));
@@ -2641,8 +3282,25 @@
         el('countdown-chip').textContent = moreWaves
           ? (S.autoNext ? 'PR\u00D3XIMA ONDA EM ' + Math.ceil(S.autoWaveTimer) + 's [AUTO]' : 'ESPA\u00C7O inicia a onda ' + (S.wave + 1))
           : '';
+        // mobile sem teclado: atualiza botão Próxima Onda
+        const nextMob2 = el('btn-nextwave-mobile');
+        if(nextMob2){
+          const canNext2 = S.state === 'idle' && moreWaves;
+          nextMob2.disabled = !canNext2;
+          nextMob2.style.opacity = canNext2 ? '1' : '0.45';
+          nextMob2.textContent = S.state === 'combat' ? 'COMBATE' : '▶ ONDA ' + (S.wave+1);
+        }
       }
       this.syncNextPreview();
+      // mobile — estado do botão próxima onda também em combat
+      const nextMob = el('btn-nextwave-mobile');
+      if(nextMob && S.state === 'combat'){
+        nextMob.disabled = true; nextMob.style.opacity='0.35'; nextMob.textContent='COMBATE';
+      } else if(nextMob && S.state === 'idle'){
+        const moreWavesC = S.endless || S.wave < S.map.waves.length;
+        nextMob.disabled = !moreWavesC; nextMob.style.opacity = moreWavesC ? '1' : '0.45';
+        if(moreWavesC) nextMob.textContent = '▶ ONDA ' + (S.wave+1);
+      }
       el('btn-speed').textContent = '\u00D7' + this.speeds[this.speedIdx];
       el('btn-auto').classList.toggle('active', !!S.autoNext);
       el('btn-mute').classList.toggle('active', !!SND.muted);
@@ -2759,6 +3417,34 @@
       }
       if (!victory) starsBox.innerHTML = '<span class="end-star off">\u2606\u2606\u2606</span>';
       el('btn-next').style.display = (victory && this.S.mapIdx + 1 < D.MAPS_DATA.length) ? '' : 'none';
+      // NOVO: animação de escolha pós-vitória — próxima fase ou infinito no mesmo mundo
+      if(victory){
+        const goActions = document.querySelector('#modal-end .go-actions');
+        if(goActions && !document.getElementById('btn-infinite')){
+          const btnInf = document.createElement('button');
+          btnInf.id='btn-infinite';
+          btnInf.className='btn chamf';
+          btnInf.style.borderColor='#38bdf8';
+          btnInf.style.color='#38bdf8';
+          btnInf.textContent='♾ CONTINUAR NO MUNDO (INFINITO)';
+          btnInf.title='Recomeça o mesmo setor no modo infinito — ondas sem fim';
+          goActions.appendChild(btnInf);
+          btnInf.addEventListener('click', ()=>{
+            SND.ui();
+            this.hideEndModal();
+            this.cameras.main.fadeOut(200);
+            this.time.delayedCall(220, ()=> this.scene.restart({ mapIdx: this.S.mapIdx, diffKey: this.S.diffKey||'normal', endless: true }));
+          });
+          // animação de entrada nos botões
+          [...goActions.children].forEach((b,i)=>{
+            b.style.opacity='0'; b.style.transform='translateY(12px)';
+            this.tweens.add({ targets: b, opacity:1, y:0, duration:400, delay: 600 + i*120, ease:'Back.out(1.4)' });
+          });
+          // brilho sutil no modal
+          const box = document.querySelector('#modal-end .modal-box');
+          if(box){ box.style.boxShadow='0 0 40px rgba(56,189,248,.25), 0 20px 60px rgba(0,0,0,.7)'; box.animate([{ boxShadow:'0 0 20px rgba(56,189,248,.15)'},{ boxShadow:'0 0 40px rgba(56,189,248,.30)'}], {duration:1200, iterations:2, direction:'alternate'}); }
+        }
+      }
       showOverlay('modal-end');
     }
   }
@@ -2799,6 +3485,9 @@
   const _origMakeTextures = makeTextures;
   makeTextures = function(scene){
     _origMakeTextures(scene);
+    // IDENTIDADE UNIFICADA: pixel-art (torres tier, inimigos) + tiles por tema
+    if (window.PXART) window.PXART.buildAll(scene);
+    if (window.TILES) try{ window.TILES.buildAll(scene); }catch(e){}
     const mk = (key, size, drawFn) => {
       if (scene.textures.exists(key)) return;
       const g = scene.make.graphics({ x: 0, y: 0, add: false });
@@ -3121,20 +3810,33 @@
     'earth-orbit': { base: 0x051425, accent: '#22d3ee', nebula: ['#0a1a3a','#051425'] }
   });
 
-  // Make earth texture
+  // Make earth texture — MAIOR E MAIS BONITO (pixel art detalhado, menos monocromático)
   const _origMakeTextures2 = makeTextures;
   makeTextures = function(scene){
     _origMakeTextures2(scene);
-    if(scene.textures.exists('earth')) return;
+    if(scene.textures.exists('earth')) try{ scene.textures.remove('earth'); }catch(e){}
     const g = scene.make.graphics({x:0,y:0,add:false});
-    // Terra: círculo azul com continentes verdes + brilho
-    g.fillStyle(0x1e40af,1); g.fillCircle(32,32,28);
-    g.fillStyle(0x22c55e,0.95);
-    g.fillCircle(26,28,10); g.fillCircle(38,36,8); g.fillCircle(30,42,6); g.fillCircle(42,24,5);
-    g.fillStyle(0xffffff,0.18); g.fillCircle(20,20,14); g.fillCircle(44,30,9);
-    g.lineStyle(2,0x38bdf8,0.9); g.strokeCircle(32,32,28);
-    g.lineStyle(1,0xffffff,0.25); g.strokeCircle(32,32,24);
-    g.generateTexture('earth',64,64); g.destroy();
+    // Terra pixel art 96x96: oceano azul profundo + continentes verdes + deserto + gelo + nuvens + brilho atmosférico
+    g.fillStyle(0x0f1a3a,1); g.fillCircle(48,48,42);
+    g.fillStyle(0x1e40af,1); g.fillCircle(48,48,40);
+    g.fillStyle(0x1e3a8a,0.6); g.fillCircle(48,48,38);
+    // continentes principais
+    g.fillStyle(0x22c55e,0.98);
+    g.fillCircle(36,40,14); g.fillCircle(60,52,11); g.fillCircle(42,62,8); g.fillCircle(64,34,7); g.fillCircle(50,70,6);
+    // montanhas/deserto
+    g.fillStyle(0xa3a04a,0.85); g.fillCircle(40,38,5); g.fillCircle(58,60,4);
+    // gelo polar
+    g.fillStyle(0xffffff,0.92); g.fillCircle(48,16,10); g.fillCircle(48,80,7);
+    // nuvens brancas pixeladas
+    g.fillStyle(0xffffff,0.22); g.fillCircle(30,30,16); g.fillCircle(66,42,12); g.fillCircle(38,58,10);
+    g.fillStyle(0xffffff,0.14); g.fillCircle(52,26,8); g.fillCircle(60,68,6);
+    // atmosfera cyan + borda
+    g.lineStyle(3,0x38bdf8,0.95); g.strokeCircle(48,48,42);
+    g.lineStyle(2,0x22d3ee,0.55); g.strokeCircle(48,48,45);
+    g.lineStyle(1,0xffffff,0.22); g.strokeCircle(48,48,38);
+    // brilho specular
+    g.fillStyle(0xffffff,0.18); g.fillCircle(32,32,18);
+    g.generateTexture('earth',96,96); g.destroy();
     const h = scene.make.graphics({x:0,y:0,add:false});
     h.fillStyle(0xffffff,1); h.fillCircle(4,4,3);
     h.generateTexture('star2',8,8); h.destroy();
@@ -3147,15 +3849,21 @@
     // substitui portal por Terra
     if(this.portalCore){ this.portalCore.destroy(); this.portalRing.destroy(); if(this.portalRing2) this.portalRing2.destroy(); }
     const p = this.portalPos;
-    // Terra grande
-    this.earth = this.add.image(p.x, p.y, 'earth').setScale(1.35).setDepth(5);
-    this.earthGlow = this.add.image(p.x, p.y, 'glow').setTint(0x22d3ee).setScale(3.2).setAlpha(0.18).setDepth(4);
-    this.earthRing = this.add.image(p.x, p.y, 'ring').setTint(0x38bdf8).setScale(2.4).setAlpha(0.5).setDepth(6);
+    // Terra GIGANTE E MAIS BONITA — escala 2.8x, glow duplo e anéis com pixel art
+    this.earth = this.add.image(p.x, p.y, 'earth').setScale(2.65).setDepth(5);
+    this.earthGlow = this.add.image(p.x, p.y, 'glow').setTint(0x22d3ee).setScale(6.0).setAlpha(0.24).setDepth(4);
+    this.earthRing = this.add.image(p.x, p.y, 'ring').setTint(0x38bdf8).setScale(4.2).setAlpha(0.60).setDepth(6);
+    this.earthRing2 = this.add.image(p.x, p.y, 'ring').setTint(0x60a5fa).setScale(5.0).setAlpha(0.26).setDepth(5);
+    // anel extra dourado para contraste
+    this.earthRing3 = this.add.image(p.x, p.y, 'ring').setTint(0xfbbf24).setScale(2.9).setAlpha(0.18).setDepth(6);
     this.tweens.add({targets:this.earthRing, angle:360, duration:14000, repeat:-1});
+    this.tweens.add({targets:this.earthRing2, angle:-360, duration:22000, repeat:-1});
+    this.tweens.add({targets:this.earthRing3, angle:360, duration:18000, repeat:-1});
     this.tweens.add({targets:this.earth, angle:2, duration:3000, yoyo:true, repeat:-1, ease:'Sine.easeInOut'});
-    this.tweens.add({targets:this.earthGlow, alpha:0.24, scale:3.5, duration:1600, yoyo:true, repeat:-1});
-    // Texto TERRA
-    this.add.text(p.x, p.y+46, 'TERRA', {fontFamily:'Orbitron', fontSize:'11px', color:'#38bdf8', fontStyle:'bold'}).setOrigin(0.5).setDepth(6).setAlpha(0.9);
+    this.tweens.add({targets:this.earthGlow, alpha:0.28, scale:6.4, duration:1600, yoyo:true, repeat:-1});
+    this.tweens.add({targets:this.earth, scale:2.75, duration:2200, yoyo:true, repeat:-1, ease:'Sine.easeInOut'});
+    // Texto TERRA maior e mais visível
+    this.add.text(p.x, p.y+62, 'T E R R A', {fontFamily:'Orbitron', fontSize:'13px', color:'#38bdf8', fontStyle:'bold'}).setOrigin(0.5).setDepth(7).setAlpha(0.95).setShadow(0,0,'#38bdf8',12,true,true);
     // Atualiza portalPos refs
     this.portalCore = this.earth; this.portalRing = this.earthRing;
   };
@@ -3240,6 +3948,7 @@
   const _origShowPanel = GameScene.prototype.showTowerPanel;
   GameScene.prototype.showTowerPanel = function(t){
     _origShowPanel.call(this,t);
+    if(t.defRef && t.defRef.kind === 'factory') return; // v3 PIXEL FASE 5: painel da fábrica não recebe extras
     const specBox=this.el('tp-specs');
     // adiciona info de mobilidade após specs
     const mob = t.moveRange || t.defRef.mobility || 3;
@@ -3322,6 +4031,13 @@
       this._finished=false;
       const bgCol = this.stage.bg || '#020617';
       this.cameras.main.setBackgroundColor(bgCol);
+      // FIX DOM: esconde HUD do TD que ficava por cima da briefing (causava trava)
+      try{ document.getElementById('topbar')?.classList.add('off'); }catch(e){}
+      try{ document.getElementById('shopbar')?.classList.add('off'); }catch(e){}
+      try{ document.getElementById('screen-menu')?.classList.add('hidden'); }catch(e){}
+      try{ document.getElementById('board-shell')?.classList.remove('hidden'); }catch(e){}
+      // garante que inputs anteriores não bloqueiem
+      this._cdRunning=false; this.phaseActive=false;
       // ===== OBJETIVO DA FASE (kill / survive / boss) =====
       this.objKind = (this.stage && this.stage.obj) ? this.stage.obj : (this.stage && this.stage.boss ? 'boss' : 'kill');
       if(this.objKind==='boss') this.objKind='boss';
@@ -3458,6 +4174,7 @@
       this.tweens.add({targets:cta,alpha:0.25,duration:600,yoyo:true,repeat:-1});
       this.briefC.add(cta);
       SND.musicTick('menu');
+      // FIX TRAVA: briefing agora responde a Phaser + DOM (ENTER, SPACE, clique, toque) e dim interativo
       const go=()=>{ if(this.phaseActive || this._cdRunning) return;
         this._cdRunning=true;
         try{
@@ -3466,12 +4183,35 @@
           this.input.keyboard.off('keydown-SPACE',go);
           this.input.keyboard.off('keydown',go);
         }catch(_){}
+        try{ if(this._domGo) document.removeEventListener('keydown', this._domGo); }catch(e){}
+        try{ document.removeEventListener('pointerdown', go); }catch(e){}
+        try{ dim.off('pointerdown',go); }catch(e){}
         this.startCountdown();
       };
-      this.input.on('pointerdown',go);
-      this.input.keyboard.on('keydown-ENTER',go);
-      this.input.keyboard.on('keydown-SPACE',go);
-      this.input.keyboard.on('keydown',go); // qualquer tecla decola
+      // Phaser input (canvas)
+      try{
+        this.input.on('pointerdown',go);
+        this.input.keyboard.on('keydown-ENTER',go);
+        this.input.keyboard.on('keydown-SPACE',go);
+        this.input.keyboard.on('keydown',go);
+      }catch(e){}
+      // DOM fallback (garante ENTER/SPACE mesmo se Phaser não capturar)
+      try{
+        const domGo = (ev)=>{ if(ev && ev.key && !['Enter',' ','Space'].includes(ev.key) && ev.type==='keydown' && ev.key.length!==1) return; go(); };
+        document.addEventListener('keydown', domGo, {once:false});
+        document.addEventListener('pointerdown', go, {once:false});
+        // guarda para remover depois
+        this._domGo = domGo;
+      }catch(e){}
+      // torna o dim clicável (cobre toda a tela) — fallback se Phaser input falhar
+      try{ dim.setInteractive(); dim.on('pointerdown', go); }catch(e){}
+      // também clique no canvas DOM direto
+      try{
+        const canvas = document.querySelector('#game-canvas canvas');
+        if(canvas) canvas.addEventListener('pointerdown', go, {once:false});
+      }catch(e){}
+      // auto-fallback: se em 30s não decolar, permite decolar via timeout (evita trava permanente)
+      this.time.delayedCall(30000, ()=>{ if(!this.phaseActive && !this._cdRunning && this.briefC) { console.warn('[Nave] fallback auto-go'); go(); } });
     }
     startCountdown(){
       if(this.briefC){ this.briefC.destroy(); this.briefC=null; }
@@ -5235,10 +5975,20 @@
             SND.ui();
             this.hideEndModal();
             const sc=this;
+            // FIX TRAVA MINI-FASE: limpa DOM do TD e para a cena Game antes de ir ao Menu
+            try{ if(sc.cleanup) sc.cleanup(); }catch(e){}
+            try{ document.getElementById('topbar')?.classList.add('off'); }catch(e){}
+            try{ document.getElementById('shopbar')?.classList.add('off'); }catch(e){}
+            try{ document.getElementById('board-shell')?.classList.remove('hidden'); }catch(e){}
             if(sc.cameras && sc.cameras.main && sc.cameras.main.fadeOut){
               sc.cameras.main.fadeOut(200);
-              sc.time.delayedCall(220, ()=> { sc.scene.start('Menu'); setTimeout(()=>{ const b=document.getElementById('btn-shmup'); if(b) b.click(); }, 500); });
+              sc.time.delayedCall(220, ()=> {
+                try{ sc.scene.stop('Game'); }catch(e){}
+                sc.scene.start('Menu');
+                setTimeout(()=>{ const b=document.getElementById('btn-shmup'); if(b) b.click(); }, 500);
+              });
             } else {
+              try{ sc.scene.stop('Game'); }catch(e){}
               sc.scene.start('Menu');
             }
           });
@@ -5293,5 +6043,17 @@
   // ULTRA: exporta moveTower e stepSim patchado
   window.DO.moveTower = moveTower;
   window.DO.stepSim = stepSim;
+  // v3 PIXEL FASES 2-7: exports novos
+  window.DO.mergeTowers = mergeTowers;
+  window.DO.canMerge = canMerge;
+  window.DO.mergeCandidates = mergeCandidates;
+  window.DO.tierCap = tierCap;
+  window.DO.getTier = D.getTier;
+  window.DO.getSuperCharge = getSuperCharge;
+  window.DO.forceSuperCharge = forceSuperCharge;
+  window.DO.fireTower = fireTower;
+  window.DO.upgradeEnemyHP = upgradeEnemyHP;
+  window.DO.upgradeFactory = upgradeFactory;
+  window.DO.hpMultiplier = hpMultiplier;
 })();
 

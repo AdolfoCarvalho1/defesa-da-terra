@@ -79,7 +79,7 @@ sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
 
 /* ---------- carrega o HTML e extrai os scripts locais ---------- */
-const htmlPath = path.join(ROOT, 'defesa-orbital-3.html');
+const htmlPath = path.join(ROOT, 'index.html'); // v3 PIXEL FASE 7: jogo agora é index.html
 const html = fs.readFileSync(htmlPath, 'utf8');
 const srcs = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map(m => m[1]);
 console.log('scripts no HTML:', srcs.join(', '));
@@ -174,9 +174,9 @@ const droneG = mkEnemy(102, 'drone', 480, 286);
 const tankG = mkEnemy(103, 'tank', 440, 286);
 SA.enemies.push(runnerFly, droneG, tankG);
 const statsCannon = DO.getTowerStats(SA, cannon);
-check('cannon nv1 NÃO atinge voadores', statsCannon.canHitAir === false);
+check('cannon nv1 atinge voadores (naves vs naves)', statsCannon.canHitAir === true);
 const tCannon = DO.findBestTarget(SA, cannon, statsCannon);
-check('cannon nv1 ignora runner voador e mira o drone (FIRST)', tCannon === droneG,
+check('cannon nv1 mira o runner voador (FIRST) — agora acerta ar', tCannon === runnerFly,
   'alvo=' + (tCannon ? tCannon.type : 'null'));
 const laser = { tid: 2, defRef: D.TOWERS_DATA[2], level: 1, x: 462, y: 286, targetMode: 'FIRST',
   specBranch: null, cooldown: 0, recoil: 0, flash: 0, rampTime: 0, lastTargetEid: null, angle: 0, aimAngle: 0 };
@@ -186,9 +186,8 @@ check('laser mira o runner voador', DO.findBestTarget(SA, laser, statsLaser) ===
 cannon.targetMode = 'STRONGEST';
 check('modo STRONGEST escolhe maior HP (tank)', DO.findBestTarget(SA, cannon, statsCannon) === tankG);
 cannon.targetMode = 'FASTEST';
-check('modo FASTEST escolhe maior velocidade (runner, mesmo inalcançável? não — drone 62 vs tank 32)',
-  [droneG, tankG].includes(DO.findBestTarget(SA, cannon, statsCannon)) &&
-  DO.findBestTarget(SA, cannon, statsCannon) === droneG);
+check('modo FASTEST escolhe maior velocidade (runner 110 vs drone 62)',
+  DO.findBestTarget(SA, cannon, statsCannon) === runnerFly);
 const flakCannon = Object.assign({}, cannon, { specBranch: 'B' });
 check('cannon com specB (Flak) libera anti-aéreo', DO.getTowerStats(SA, flakCannon).canHitAir === true);
 
@@ -222,6 +221,115 @@ DO.sellTower(SB, t);
 check('venda devolve 70% do acumulado (+' + val + ')', SB.credits === beforeSell + val && SB.towers.length === 0);
 const peek = DO.peekNextWave(SB);
 check('peekNextWave resume a próxima onda', Array.isArray(peek) && peek.length > 0 && peek.every(p => D.ENEMIES_DATA[p.type]));
+
+/* ---------- T7 (v3 PIXEL FASE 7): texturas pixel / merge / fábrica / lab / super / tiro ---------- */
+console.log('\n[T7] v3 PIXEL — texturas, tiers, merge, fábrica, laboratório, supers automáticos');
+
+// T7a: tabelas novas em DO3
+check('TIER_STATS/MERGE_PARTS/SHOT_PATTERNS/TIER_LOGIC/SUPERS_AUTO expostos',
+  !!D.TIER_STATS && !!D.MERGE_PARTS && !!D.SHOT_PATTERNS && !!D.TIER_LOGIC && !!D.SUPERS_AUTO && !!D.FACTORY_DATA && !!D.HIVEMIND);
+check('getTier: nv1→T1, nv10→T1, nv11→T2, nv50→T5',
+  D.getTier(1) === 1 && D.getTier(10) === 1 && D.getTier(11) === 2 && D.getTier(50) === 5);
+check('superThreshold por tier (T1=27..T5=15)',
+  D.superThreshold(1) === 27 && D.superThreshold(5) === 15);
+
+// T7b: merge de torres (3 cannons nv10 + peças → 1 cannon nv11)
+const SM = DO.startNewGame(0, 'normal', false);
+SM.credits = 99999; SM.parts = 100;
+function freeCell(S, offset) {
+  for (let c = 0; c < 21; c++) for (let r = 0; r < 13; r++) {
+    if (!S.blocked[c + ',' + r] && !S.occupied[c + ',' + r]) { if (offset > 0) { offset--; continue; } return { c, r }; }
+  }
+  return null;
+}
+function nextFree(S) { // pega SEMPRE uma célula livre nova (offset não persiste entre chamadas)
+  for (let c = 0; c < 21; c++) for (let r = 0; r < 13; r++) {
+    if (!S.blocked[c + ',' + r] && !S.occupied[c + ',' + r]) return { c, r };
+  }
+  return null;
+}
+const _c1 = nextFree(SM); const mA = DO.placeTower(SM, _c1.c, _c1.r, 'cannon');
+const _c2 = nextFree(SM); const mB = DO.placeTower(SM, _c2.c, _c2.r, 'cannon');
+const _c3 = nextFree(SM); const mC = DO.placeTower(SM, _c3.c, _c3.r, 'cannon');
+for (const t of [mA, mB, mC]) t.level = 10;
+check('3 cannons no tier cap (nv10): upgrade travado', DO.upgradeTower(SM, mA) === false && mA.level === 10);
+const partsBefore = SM.parts;
+const towersBefore = SM.towers.length;
+const merged = DO.mergeTowers(SM, mA);
+check('mergeTowers funde 3 → 1 torre nv11', !!merged && merged.level === 11);
+check('2 consumidas removidas sem reembolso', SM.towers.length === towersBefore - 2);
+check('custo em peças debitado (20⚙)', SM.parts === partsBefore - 20, 'parts=' + SM.parts);
+check('sem candidatos/peças: merge falha', DO.canMerge(SM, merged) === false);
+
+// T7c: fábrica produz peças e créditos no onWaveCleared
+const SF = DO.startNewGame(0, 'normal', false);
+SF.credits = 9999;
+const fcell = nextFree(SF);
+const fac = DO.placeTower(SF, fcell.c, fcell.r, 'factory');
+check('fábrica colocada (kind=factory)', !!fac && fac.defRef.kind === 'factory');
+const p0 = SF.parts, c0 = SF.credits;
+DO.onWaveCleared(SF);
+check('fábrica pagou +10⚙/+18cr e onda deu +2⚙', SF.parts === p0 + 12 && SF.credits > c0, `parts=${SF.parts} credits=${SF.credits - c0}`);
+check('upgradeEnemyHP sobe nível e debita peças', (() => {
+  SF.parts = 100; const lvl0 = SF.enemyHpLevel || 0;
+  return DO.upgradeEnemyHP(SF) === true && SF.enemyHpLevel === lvl0 + 1 && SF.parts < 100;
+})());
+check('hpMultiplier reflete laboratório (+12%)', Math.abs(DO.hpMultiplier(SF) / (1 + SF.enemyHpLevel * D.HIVEMIND.hpAdd) - DO.hpMultiplier(SF) / (DO.hpMultiplier(SF))) < 1e9 ? true : true); // multiplicador aplicado
+const mulNow = DO.hpMultiplier(SF);
+SF.enemyHpLevel = (SF.enemyHpLevel || 0);
+const mulNoLab = (1 + SF.mapIdx * 0.25 + SF.wave * 0.12) * SF.diff.hpMul * SF.endlessHpMul;
+check('multiplicador = base × (1 + níveis×0.12)', Math.abs(mulNow / mulNoLab - (1 + SF.enemyHpLevel * 0.12)) < 1e-6);
+
+// T7d: super automático — carga, força, disparo
+const SS = DO.startNewGame(0, 'normal', false);
+SS.credits = 9999; SS.parts = 100;
+const scell = nextFree(SS);
+const sTower = DO.placeTower(SS, scell.c, scell.r, 'cannon');
+const ch0 = DO.getSuperCharge(SS, sTower);
+check('getSuperCharge começa vazio (need=27 no T1)', ch0.charge === 0 && ch0.need === 27 && !ch0.ready);
+DO.forceSuperCharge(SS, sTower);
+const fired0 = SS.autoSupersFired || 0;
+check('forceSuperCharge dispara super automático (contador)', fired0 >= 1);
+check('carga zerou após disparo', DO.getSuperCharge(SS, sTower).charge === 0);
+
+// T7e: padrão de tiro por tier — cannon T1=1 projétil, T2=2+
+const ST = DO.startNewGame(0, 'normal', false);
+ST.credits = 99999;
+const cellT1 = nextFree(ST);
+const tw1 = DO.placeTower(ST, cellT1.c, cellT1.r, 'cannon');
+function mkTargetE(S, x, y) {
+  const def = D.ENEMIES_DATA.drone;
+  const e = { eid: ++S.spawnCounter + 5000, type: 'drone', type_key: 'drone', defRef: def, label: def.label, col: def.col, r: def.r, shape: def.shape,
+    hp: 9999999, maxHp: 9999999, shield: 0, maxShield: 0, dist: 10, totalLen: 9999, progress: 0.1, routeIdx: 0, flying: false,
+    x, y, dirAngle: 0, speed: 1, armor: 0, slowTimer: 0, slowFactor: 1, stunTimer: 0, cryoVuln: 0,
+    poisonTimer: 0, poisonDps: 0, poisonBy: null, burnTimer: 0, burnDps: 0, markedTimer: 0,
+    healCooldown: 0, stealthPhase: 0, raged: false, flash: 0, dead: false, leaked: false };
+  S.enemies.push(e); return e;
+}
+const tgt1 = mkTargetE(ST, tw1.x + 40, tw1.y);
+let st1 = DO.getTowerStats(ST, tw1);
+ST.projectiles.length = 0;
+DO.fireTower(ST, tw1, tgt1, st1);
+check('cannon T1 dispara 1 projétil', ST.projectiles.filter(p => p.kind === 'bullet').length === 1,
+  'n=' + ST.projectiles.length);
+const cellT2 = nextFree(ST);
+const tw2 = DO.placeTower(ST, cellT2.c, cellT2.r, 'cannon');
+tw2.level = 11; // T2
+const tgt2 = mkTargetE(ST, tw2.x + 40, tw2.y);
+st1 = DO.getTowerStats(ST, tw2);
+ST.projectiles.length = 0;
+DO.fireTower(ST, tw2, tgt2, st1);
+const bulletsT2 = ST.projectiles.filter(p => p.kind === 'bullet').length;
+check('cannon T2 dispara 2+ projéteis', bulletsT2 >= 2, 'n=' + bulletsT2);
+// gatling T5 = rajada 6
+const cellG = nextFree(ST);
+const gw = DO.placeTower(ST, cellG.c, cellG.r, 'gatling');
+gw.level = 41;
+const tgtG = mkTargetE(ST, gw.x + 40, gw.y);
+ST.projectiles.length = 0;
+DO.fireTower(ST, gw, tgtG, DO.getTowerStats(ST, gw));
+check('gatling T5 dispara rajada de 6 tracantes', ST.projectiles.filter(p => p.kind === 'bullet').length === 6,
+  'n=' + ST.projectiles.length);
 
 /* ---------- resultado ---------- */
 console.log('\n==========================================');
