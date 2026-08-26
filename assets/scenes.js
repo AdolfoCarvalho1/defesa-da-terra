@@ -3616,10 +3616,14 @@
           btnInf.addEventListener('click', ()=>{
             this.continueEndless();
           });
-          // animação de entrada nos botões
+          // animação de entrada nos botões — FIX: Phaser tweens não funcionam em DOM (deixava botões com opacity 0 e travava próxima fase)
           [...goActions.children].forEach((b,i)=>{
             b.style.opacity='0'; b.style.transform='translateY(12px)';
-            this.tweens.add({ targets: b, opacity:1, y:0, duration:400, delay: 600 + i*120, ease:'Back.out(1.4)' });
+            try{
+              b.animate([{opacity:0, transform:'translateY(12px)'},{opacity:1, transform:'translateY(0)'}], {duration:400, delay:600+i*120, easing:'cubic-bezier(0.2,1.4,0.4,1)', fill:'forwards'});
+              // fallback garante visível após animação mesmo se fill:forwards falhar
+              setTimeout(()=>{ b.style.opacity='1'; b.style.transform='none'; }, 600+i*120+420);
+            }catch(e){ b.style.opacity='1'; b.style.transform='none'; }
           });
           // brilho sutil no modal
           const box = document.querySelector('#modal-end .modal-box');

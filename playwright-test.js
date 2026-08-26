@@ -98,6 +98,15 @@ const path = require('path');
   await page.waitForTimeout(150);
   check('target cycle funcionou', (await page.locator('#tp-target').textContent()).includes('◇') || true);
 
+  // fecha painel — quando aberto, #board-shell.tower-panel-open esconde #supers (visibility:hidden)
+  await page.evaluate(()=>{
+    const sc = window.__game && window.__game.scene.getScene('Game');
+    if(sc){ sc.selected=null; if(sc.hideTowerPanel) sc.hideTowerPanel(); }
+    const p=document.getElementById('tower-panel'); if(p) p.classList.add('hidden');
+    const bs=document.getElementById('board-shell'); if(bs) bs.classList.remove('tower-panel-open');
+  });
+  await page.waitForTimeout(300);
+
   // 8) Supers
   await page.click('#super-ion');
   await page.waitForTimeout(200);
