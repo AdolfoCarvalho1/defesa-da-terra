@@ -145,8 +145,11 @@ button:focus-visible,.map-card:focus-visible,.chk-wrap:focus-within{
 @keyframes edgeHit{0%{opacity:1}100%{opacity:0}}
 
 /* SUPERS ULTRA */
-#supers{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;gap:8px;z-index:33;pointer-events:none} /* v3 PIXEL: acima do painel, mas deixa passar clique fora dos botões */
+#supers{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;gap:8px;z-index:33;pointer-events:none;
+  transition:opacity .16s ease,transform .16s ease,visibility 0s linear .16s} /* v3 PIXEL: acima do painel, mas deixa passar clique fora dos botões */
 #supers .super-btn{pointer-events:auto}
+#board-shell.tower-panel-open #supers{opacity:0;visibility:hidden;transform:translateX(10px);pointer-events:none}
+#board-shell.tower-panel-open #supers .super-btn{pointer-events:none}
 .super-btn{--sc:var(--cyan);--cdpct:0%;position:relative;width:82px;height:60px;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
   background:linear-gradient(160deg, rgba(22,38,73,.95), rgba(13,21,42,.98));
@@ -166,16 +169,16 @@ button:focus-visible,.map-card:focus-visible,.chk-wrap:focus-within{
 @keyframes pulseB{to{box-shadow:0 0 28px color-mix(in srgb,var(--sc) 70%, transparent)}}
 
 /* TOWER PANEL - HOLOGRAM */
-#tower-panel{position:absolute;right:10px;bottom:10px;width:280px;max-height:calc(100% - 20px);overflow-y:auto;background:linear-gradient(180deg, rgba(13,22,44,.98), rgba(10,16,32,.98));
-  border:1px solid rgba(56,189,248,.35);padding:12px;z-index:31;backdrop-filter:blur(14px);pointer-events:auto;
+#tower-panel{position:absolute;right:10px;bottom:10px;width:300px;max-height:calc(100% - 20px);overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;background:linear-gradient(180deg, rgba(13,22,44,.98), rgba(10,16,32,.98));
+  border:1px solid rgba(56,189,248,.35);padding:12px;z-index:36;backdrop-filter:blur(14px);pointer-events:auto;
   box-shadow:0 10px 30px rgba(0,0,0,.6), 0 0 20px rgba(56,189,248,.15), inset 0 1px 0 rgba(255,255,255,.06)}
 #tower-panel.hidden{pointer-events:none}
 #tower-panel::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg, transparent, var(--cyan), transparent);opacity:.6}
-.tp-head{display:flex;align-items:center;gap:10px}
+.tp-head{display:grid;grid-template-columns:32px minmax(0,1fr);grid-template-rows:auto auto;align-items:center;column-gap:10px;row-gap:2px;padding-right:42px;min-height:42px}
 #tp-icon{font-size:26px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;
-  background:radial-gradient(circle, rgba(56,189,248,.15), transparent 70%);border:1px solid rgba(56,189,248,.15);text-shadow:0 0 12px currentColor}
-#tp-name{font-family:'Orbitron';font-size:13px;font-weight:800;letter-spacing:.04em}
-#tp-level{margin-left:auto;display:flex;gap:3px}
+  grid-row:1/3;background:radial-gradient(circle, rgba(56,189,248,.15), transparent 70%);border:1px solid rgba(56,189,248,.15);text-shadow:0 0 12px currentColor}
+#tp-name{grid-column:2;font-family:'Orbitron';font-size:13px;font-weight:800;letter-spacing:.04em;line-height:1.12;overflow-wrap:anywhere}
+#tp-level{grid-column:2;margin-left:0;display:flex;gap:3px;align-items:center;flex-wrap:wrap;min-width:0}
 #tp-level i,#tc-pips i{width:9px;height:9px;background:rgba(255,255,255,.08);display:block;transform:rotate(0);border:1px solid rgba(255,255,255,.06)}
 #tp-level i.on,#tc-pips i.on{background:var(--gold);box-shadow:0 0 8px var(--gold);border-color:var(--gold)}
 #tp-stats{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;margin:10px 0;font-size:12.5px}
@@ -190,7 +193,9 @@ button:focus-visible,.map-card:focus-visible,.chk-wrap:focus-within{
 .tp-actions{display:flex;gap:7px;margin-top:8px}
 .tp-actions .btn{flex:1;font-weight:800;letter-spacing:.08em}
 #tp-upgrade{background:linear-gradient(180deg, rgba(56,189,248,.18), rgba(56,189,248,.06));border-color:var(--cyan)}
-#tp-close{position:absolute;top:6px;right:6px;width:24px;height:24px;padding:0;display:flex;align-items:center;justify-content:center;font-size:12px;border:none;background:rgba(255,255,255,.06)}
+#tp-merge-buy{width:100%;margin-top:8px;min-height:44px;background:linear-gradient(180deg,rgba(251,191,36,.18),rgba(251,191,36,.06));border-color:var(--gold);color:#fde68a;font-weight:900;line-height:1.15}
+#tp-merge-buy small{display:block;margin-top:3px;color:var(--muted);font-family:'JetBrains Mono';font-size:9px;letter-spacing:.02em}
+#tp-close{position:absolute;top:5px;right:5px;z-index:2;width:44px;height:44px;min-width:44px;min-height:44px;padding:0;display:flex;align-items:center;justify-content:center;font-size:14px;border:1px solid rgba(143,163,196,.2);background:rgba(255,255,255,.06)}
 
 #banner{position:absolute;top:30%;left:50%;transform:translate(-50%,-8px);z-index:32;
   font-family:'Orbitron';font-size:26px;font-weight:900;letter-spacing:.14em;text-align:center;
@@ -699,7 +704,7 @@ html,body{
   .shop-card .sc-name{font-size:7.5px;line-height:1.12;overflow-wrap:anywhere}
   .shop-card .sc-cost{font-size:9px}
   .shop-card .sc-cost::before{font-size:7px}
-  #tower-panel{right:6px;bottom:6px;width:min(310px,48vw);max-height:calc(100dvh - 66px);overflow:auto}
+  #tower-panel{right:6px;bottom:6px;width:min(340px,58vw);max-height:calc(100dvh - 66px);overflow:auto}
   #supers{top:5px;right:5px;gap:4px}
   .super-btn{width:66px;height:48px;min-height:44px;gap:0;background:linear-gradient(160deg,rgba(22,38,73,.98),rgba(8,15,31,.99))}
   .super-btn .sb-name-full{display:none}
@@ -748,7 +753,7 @@ html,body{
   #shopbar{grid-column:1;grid-row:3;display:flex!important;width:100%;height:58px;padding:2px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;scrollbar-width:none}
   #shopbar::-webkit-scrollbar{display:none}
   .shop-card{display:grid;flex:0 0 104px;min-width:104px;max-width:104px;height:54px;scroll-snap-align:start}
-  #tower-panel{bottom:62px;width:min(300px,72vw);max-height:calc(100dvh - 122px)}
+  #tower-panel{right:6px;bottom:62px;width:min(340px,calc(100vw - 12px));max-height:calc(100dvh - 122px)}
   .wave-txt,#next-preview{display:none}
   #btn-hivemind{width:44px!important;min-width:44px!important}
   #btn-hivemind::after{content:'🧬';font-size:13px}
@@ -846,6 +851,7 @@ html,body{
       <div id="tp-stats"></div>
       <button class="ctrl-btn chamf" id="tp-target">◇ FIRST</button>
       <div id="tp-specs"></div>
+      <button class="btn small chamf hidden" id="tp-merge-buy">COMPLETAR FUSÃO</button>
       <div class="tp-actions">
         <button class="btn small chamf" id="tp-upgrade">MELHORAR</button>
         <button class="btn small chamf" id="tp-sell">VENDER</button>

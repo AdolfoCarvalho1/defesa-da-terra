@@ -261,6 +261,28 @@ check('2 consumidas removidas sem reembolso', SM.towers.length === towersBefore 
 check('custo em peças debitado (20⚙)', SM.parts === partsBefore - 20, 'parts=' + SM.parts);
 check('sem candidatos/peças: merge falha', DO.canMerge(SM, merged) === false);
 
+// T7b.1: fusão direta compra apenas as cópias que faltam pelo valor integral do tier
+const SQ = DO.startNewGame(0, 'normal', false);
+SQ.credits = 99999; SQ.parts = 999;
+const qCell = nextFree(SQ); const qTower = DO.placeTower(SQ, qCell.c, qCell.r, 'cannon');
+qTower.level = 10;
+const q = DO.mergePurchaseQuote(SQ, qTower);
+check('fusão direta T1 calcula 2 cópias, $100 e 20⚙', q.missing === 2 && q.credits === 100 && q.parts === 20,
+  `missing=${q.missing} credits=${q.credits} parts=${q.parts}`);
+const qCredits = SQ.credits, qParts = SQ.parts;
+check('fusão direta promove nv10 → nv11 sem ocupar novas casas',
+  DO.mergeWithPurchase(SQ, qTower) === qTower && qTower.level === 11 && SQ.towers.length === 1);
+check('fusão direta debita exatamente cópias e peças', SQ.credits === qCredits - 100 && SQ.parts === qParts - 20);
+const SQ2 = DO.startNewGame(0, 'normal', false);
+SQ2.credits = 99999; SQ2.parts = 999;
+const q2aCell = nextFree(SQ2); const q2a = DO.placeTower(SQ2, q2aCell.c, q2aCell.r, 'cannon');
+const q2bCell = nextFree(SQ2); DO.placeTower(SQ2, q2bCell.c, q2bCell.r, 'cannon');
+q2a.level = 10;
+const q2 = DO.mergePurchaseQuote(SQ2, q2a);
+check('uma cópia existente reduz a compra direta para 1 nave', q2.missing === 1 && q2.credits === 50 && q2.parts === 20);
+const t2Entry = DO.tierEntryPrice(D.TOWERS_DATA[0], 2);
+check('cópia T2 inclui construção, upgrades e fusão do tier anterior', t2Entry.credits > 150 && t2Entry.parts === 20);
+
 // T7c: fábrica produz peças e créditos no onWaveCleared
 const SF = DO.startNewGame(0, 'normal', false);
 SF.credits = 9999;

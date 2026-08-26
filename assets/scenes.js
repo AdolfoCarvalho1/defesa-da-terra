@@ -795,6 +795,47 @@
     if (!t || t.defRef.kind === 'factory' || t.level >= D.TOWER_MAX_LVL) return false;
     return mergeCandidates(S, t).length >= 2;
   }
+  function tierEntryPrice(def, tier) {
+    if (!def || def.kind === 'factory') return { credits: 0, parts: 0 };
+    const targetTier = Math.max(1, Math.min(5, tier || 1));
+    let credits = def.cost;
+    let parts = 0;
+    for (let currentTier = 1; currentTier < targetTier; currentTier++) {
+      const mock = { defRef: def, level: (currentTier - 1) * 10 + 1 };
+      let upgrades = 0;
+      while (mock.level < currentTier * 10) {
+        upgrades += upgradeCost(mock);
+        mock.level++;
+      }
+      credits = credits * 3 + upgrades;
+      parts = parts * 3 + (D.MERGE_PARTS[currentTier] || 0);
+    }
+    return { credits, parts };
+  }
+  function mergePurchaseQuote(S, t) {
+    if (!S || !t || t.defRef.kind === 'factory' || t.level >= D.TOWER_MAX_LVL || t.level < tierCap(t)) return null;
+    const tier = D.getTier(t.level);
+    const existing = Math.min(2, mergeCandidates(S, t).length);
+    const missing = 2 - existing;
+    const entry = tierEntryPrice(t.defRef, tier);
+    return {
+      tier,
+      existing,
+      missing,
+      credits: missing * entry.credits,
+      parts: (D.MERGE_PARTS[tier] || 0) + missing * entry.parts
+    };
+  }
+  function finishMerge(S, t, others, tier, direct) {
+    for (const o of others) sellTowerRaw(S, o);
+    t.level = tier * 10 + 1;
+    SND.upgrade();
+    ev(S, { t: 'banner', txt: defName(t) + (direct ? ' COMPLETOU A FUSÃO' : ' FUNDIRAM') + ' → TIER ' + (tier + 1) + '!', col: '#fbbf24', strong: true });
+    ev(S, { t: 'ring', x: t.x, y: t.y, maxR: CELL * 3, col: '#fbbf24' });
+    ev(S, { t: 'lvlFx', x: t.x, y: t.y, col: '#fbbf24' });
+    unlockAchievement('max_tower');
+    return t;
+  }
   function mergeTowers(S, t) {
     if (!canMerge(S, t)) { SND.error(); return null; }
     const tier = D.getTier(t.level);
@@ -803,14 +844,26 @@
     const others = mergeCandidates(S, t).slice(0, 2);
     if (others.length < 2) { SND.error(); return null; }
     S.parts -= partsCost;
-    for (const o of others) sellTowerRaw(S, o); // consumidas SEM reembolso
-    t.level = tier * 10 + 1;
-    SND.upgrade();
-    ev(S, { t: 'banner', txt: defName(t) + ' FUNDIRAM → TIER ' + (tier + 1) + '!', col: '#fbbf24', strong: true });
-    ev(S, { t: 'ring', x: t.x, y: t.y, maxR: CELL * 3, col: '#fbbf24' });
-    ev(S, { t: 'lvlFx', x: t.x, y: t.y, col: '#fbbf24' });
-    unlockAchievement('max_tower');
-    return t;
+    return finishMerge(S, t, others, tier, false); // consumidas SEM reembolso
+  }
+  function mergeWithPurchase(S, t) {
+    const quote = mergePurchaseQuote(S, t);
+    if (!quote) { SND.error(); return null; }
+    if (quote.missing === 0) return mergeTowers(S, t);
+    if (S.credits < quote.credits) {
+      SND.error();
+      ev(S, { t: 'float', x: t.x, y: t.y - 16, txt: 'CRÉDITOS INSUFICIENTES', col: '#f43f5e', size: 11 });
+      return null;
+    }
+    if ((S.parts || 0) < quote.parts) {
+      SND.error();
+      ev(S, { t: 'float', x: t.x, y: t.y - 16, txt: 'PEÇAS INSUFICIENTES', col: '#f43f5e', size: 11 });
+      return null;
+    }
+    const others = mergeCandidates(S, t).slice(0, quote.existing);
+    S.credits -= quote.credits;
+    S.parts -= quote.parts;
+    return finishMerge(S, t, others, quote.tier, true);
   }
   function defName(t) { const d = t.defRef || t.def; return d ? d.name : ''; }
   function sellTowerRaw(S, t) {
@@ -2277,6 +2330,10 @@
       if (scr) scr.classList.remove('off');
       const shop = document.getElementById('shopbar');
       if (shop) shop.classList.remove('off');
+      const boardShell = document.getElementById('board-shell');
+      if (boardShell) boardShell.classList.remove('tower-panel-open');
+      const towerPanel = document.getElementById('tower-panel');
+      if (towerPanel) towerPanel.classList.add('hidden');
       hideOverlay('modal-end'); hideOverlay('pause-overlay');
 
       this.cameras.main.fadeIn(320);
@@ -2297,6 +2354,10 @@
       if (scr) scr.classList.add('off');
       const shop = document.getElementById('shopbar');
       if (shop) shop.classList.add('off');
+      const boardShell = document.getElementById('board-shell');
+      if (boardShell) boardShell.classList.remove('tower-panel-open');
+      const towerPanel = document.getElementById('tower-panel');
+      if (towerPanel) towerPanel.classList.add('hidden');
       hideOverlay('modal-end'); hideOverlay('pause-overlay'); hideTip();
       ['banner'].forEach(id => { const el = document.getElementById(id); if (el) el.classList.remove('show'); });
     }
@@ -2572,7 +2633,14 @@
     /* ---------- painel da torre selecionada ---------- */
     showTowerPanel(t) {
       const panel = this.el('tower-panel');
+      const wasHidden = panel.classList.contains('hidden');
       panel.classList.remove('hidden');
+      if (wasHidden) {
+        panel.scrollTop = 0;
+        requestAnimationFrame(() => { panel.scrollTop = 0; });
+      }
+      const boardShell = this.el('board-shell');
+      if (boardShell) boardShell.classList.add('tower-panel-open');
       const def = t.defRef;
       // v3 PIXEL FASE 5: painel próprio da fábrica
       if (def.kind === 'factory') return this.showFactoryPanel(t);
@@ -2610,6 +2678,8 @@
         specBox.innerHTML = '<div class="spec-chosen tt-muted">Especializações desbloqueiam no nível 4.</div>';
       }
       const up = this.el('tp-upgrade');
+      const mergeBuy = this.el('tp-merge-buy');
+      mergeBuy.classList.add('hidden');
       const tier = D.getTier(t.level);
       const isFactory = def.kind === 'factory';
       if (!isFactory && t.level >= tierCap(t)) {
@@ -2617,9 +2687,17 @@
         const cands = mergeCandidates(this.S, t);
         const partsCost = D.MERGE_PARTS[tier] || 0;
         const ok = cands.length >= 2 && (this.S.parts || 0) >= partsCost;
-        up.textContent = 'FUNDIR (2/3: ' + cands.length + ') • ' + partsCost + '⚙';
+        up.textContent = 'FUNDIR • ' + Math.min(3, cands.length + 1) + '/3 • ' + partsCost + '⚙';
         up.disabled = !ok;
         up.title = 'Consome esta torre + 2 iguais do mesmo tier → T' + (tier + 1) + ' nv ' + (tier * 10 + 1);
+        const quote = mergePurchaseQuote(this.S, t);
+        if (quote && quote.missing > 0) {
+          const copies = quote.missing === 1 ? '1 NAVE' : quote.missing + ' NAVES';
+          mergeBuy.innerHTML = 'COMPLETAR FUSÃO<small>COMPRAR ' + copies + ' • $' + quote.credits + ' + ' + quote.parts + '⚙</small>';
+          mergeBuy.disabled = this.S.credits < quote.credits || (this.S.parts || 0) < quote.parts;
+          mergeBuy.title = 'Compra as cópias que faltam pelo custo integral deste tier e funde agora';
+          mergeBuy.classList.remove('hidden');
+        }
       } else if (isFactory) {
         const pc = D.FACTORY_DATA.upgradePartsCost(t.level), cc = D.FACTORY_DATA.upgradeCreditCost(t.level);
         if (t.level >= D.FACTORY_DATA.maxLevel) { up.textContent = 'FÁBRICA NO MÁXIMO • NV5'; up.disabled = true; }
@@ -2660,6 +2738,8 @@
     hideTowerPanel() {
       const panel = this.el('tower-panel');
       if (panel) panel.classList.add('hidden');
+      const boardShell = this.el('board-shell');
+      if (boardShell) boardShell.classList.remove('tower-panel-open');
     }
 
     /* v3 PIXEL FASE 5: painel da fábrica (produção + próximo nível) */
@@ -2681,6 +2761,7 @@
       el('tp-target').textContent = '◇ SEM ALVO';
       const specBox = el('tp-specs');
       specBox.innerHTML = '<div class="spec-chosen tt-muted">Prédio industrial: paga a conta com peças ⚙ para FUNDIR torres e ligar o laboratório Hivemind.</div>';
+      el('tp-merge-buy').classList.add('hidden');
       const up = el('tp-upgrade');
       if (t.level >= fd.maxLevel) { up.textContent = 'FÁBRICA NO MÁXIMO • NV5'; up.disabled = true; }
       else {
@@ -2776,6 +2857,11 @@
         if (t.defRef.kind === 'factory') { upgradeFactory(this.S, t); }
         else if (t.level >= tierCap(t)) { mergeTowers(this.S, t); } // v3 PIXEL FASE 2
         else { upgradeTower(this.S, t); }
+        this.showTowerPanel(this.selected);
+      });
+      this.el('tp-merge-buy').addEventListener('click', () => {
+        if (!this.selected) return;
+        mergeWithPurchase(this.S, this.selected);
         this.showTowerPanel(this.selected);
       });
       this.el('tp-sell').addEventListener('click', () => { if (this.selected) { sellTower(this.S, this.selected); this.selected = null; this.hideTowerPanel(); } });
@@ -6148,6 +6234,9 @@
   window.DO.stepSim = stepSim;
   // v3 PIXEL FASES 2-7: exports novos
   window.DO.mergeTowers = mergeTowers;
+  window.DO.mergeWithPurchase = mergeWithPurchase;
+  window.DO.mergePurchaseQuote = mergePurchaseQuote;
+  window.DO.tierEntryPrice = tierEntryPrice;
   window.DO.canMerge = canMerge;
   window.DO.mergeCandidates = mergeCandidates;
   window.DO.tierCap = tierCap;
