@@ -2468,10 +2468,22 @@
     }
 
     spark(x, y, colHex, n, spd, life, key) {
+      const k = key || 'dot';
+      // cap visual — evita poluição na onda 33 x4 (screenshot: chuva amarela infinita)
+      const arr = this.pools[k];
+      if (arr) {
+        let active = 0;
+        for (const img of arr) if (img.active) active++;
+        if (active > 120) {
+          if (active > 180) return; // tela já poluída, skip
+          n = Math.max(1, Math.floor(n * 0.45)); // throttle
+        }
+        if (active > 220) return;
+      }
       const col = typeof colHex === 'string' ? Phaser.Display.Color.HexStringToColor(colHex).color : colHex;
       for (let i = 0; i < n; i++) {
-        const p = this.getImg(key || 'dot');
-        p.setTexture(key || 'dot').setTint(col);
+        const p = this.getImg(k);
+        p.setTexture(k).setTint(col);
         p.x = x; p.y = y;
         const a = Math.random() * Math.PI * 2;
         const v = spd * (0.4 + Math.random() * 0.8);
@@ -2954,8 +2966,8 @@
     update(_, dms) {
       const dt = Math.min(0.05, dms / 1000);
       const ended = this.S.state === 'victory' || this.S.state === 'defeat';
+      const steps = this.speeds[this.speedIdx] || 1;
       if (!this.paused && !ended) {
-        const steps = this.speeds[this.speedIdx];
         for (let i = 0; i < steps; i++) {
           if (this.S.state === 'victory' || this.S.state === 'defeat') break;
           stepSim(this.S, dt);
@@ -2964,16 +2976,17 @@
       }
       this.dashOffset += dms * 0.06;
       this.consumeEvents();
-      this.updateParticles(dt * (this.paused ? 0 : 1));
-      this.drawDynamic();
+      const effDt = dt * steps * (this.paused || ended ? 0 : 1);
+      this._effDt = effDt;
+      this.updateParticles(effDt);
+      this.drawDynamic(effDt);
       this.syncEnemies();
       this.syncTowers();
       this.syncProjectiles();
       this.syncHud();
       this.syncBossBar();
-      // v3 PIXEL FASE 2: painel só fica aberto se a torre ainda existir (evita painel fantasma sobre os supers)
       if (this.selected && !this.S.towers.includes(this.selected)) { this.selected = null; this.hideTowerPanel(); }
-      this.pollFloats(dt);
+      this.pollFloats(effDt);
     }
 
     /* v3 PIXEL FASES 2-6: helpers de teste headless */
@@ -3133,7 +3146,8 @@
       }
     }
 
-    drawDynamic() {
+    drawDynamic(dt) {
+      const effDt = (dt != null ? dt : 0.016);
       const g = this.beamGfx;
       g.clear();
       // lasers contínuos
@@ -3151,7 +3165,7 @@
       // zaps tesla
       for (let i = this.zaps.length - 1; i >= 0; i--) {
         const z = this.zaps[i];
-        z.life -= 0.016;
+        z.life -= effDt;
         if (z.life <= 0) { this.zaps.splice(i, 1); continue; }
         const a = z.life / z.tot;
         g.lineStyle(4 * a, 0x34d399, 0.5 * a);
@@ -3162,7 +3176,7 @@
       // tracers sniper/rail
       for (let i = this.tracers.length - 1; i >= 0; i--) {
         const tr = this.tracers[i];
-        tr.life -= 0.016;
+        tr.life -= effDt;
         if (tr.life <= 0) { this.tracers.splice(i, 1); continue; }
         const col = Phaser.Display.Color.HexStringToColor(tr.col).color;
         const a = tr.life / tr.tot;
@@ -3171,7 +3185,7 @@
       }
       // feixe de íons
       if (this.ionFx) {
-        this.ionFx.life -= 0.016;
+        this.ionFx.life -= effDt;
         if (this.ionFx.life <= 0) this.ionFx = null;
         else {
           const f = this.ionFx.life / this.ionFx.tot;
@@ -3793,16 +3807,17 @@
     }
     _origSyncProjectiles.call(this);
     if(this.beamGfx){
+      const _dt = this._effDt != null ? this._effDt : 0.016;
       for(const pr of this.S.projectiles){
         if(pr._trail){
           for(let i=0;i<pr._trail.length;i++){
-            const pt = pr._trail[i]; pt.life -= 0.016;
+            const pt = pr._trail[i]; pt.life -= _dt;
             const a = Math.max(0, pt.life/0.22);
             this.beamGfx.fillStyle(0xfb923c, a*0.5); this.beamGfx.fillCircle(pt.x, pt.y, 4*(a));
           }
           pr._trail = pr._trail.filter(p=>p.life>0);
         }
-        if(pr._btrail){ for(const pt of pr._btrail){ pt.life -= 0.016; } pr._btrail = pr._btrail.filter(p=>p.life>0); }
+        if(pr._btrail){ for(const pt of pr._btrail){ pt.life -= _dt; } pr._btrail = pr._btrail.filter(p=>p.life>0); }
         if(pr._img){ if(pr.kind==='missile') pr._img.setScale(0.62 + Math.sin(this.S.time*12)*0.06); }
       }
     }
