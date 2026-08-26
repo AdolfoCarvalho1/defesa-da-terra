@@ -266,7 +266,7 @@ var DO3 = (function () {
     boss1:    { hp: 1800, spd: 24, gold: 160, res: 15, r: 20, col: '#f43f5e', label: 'Nave-Mãe Alfa', shape: 'boss', dmg: 5, isBoss: true, shield: 400 },
     boss2:    { hp: 3200, spd: 22, gold: 220, res: 25, r: 22, col: '#fb923c', label: 'Titan Hivemind Hélios', shape: 'boss', dmg: 6, isBoss: true, shield: 800 },
     boss3:    { hp: 5000, spd: 20, gold: 300, res: 40, r: 24, col: '#22d3ee', label: 'Devorador de Mundos', shape: 'boss', dmg: 8, isBoss: true, shield: 1400 },
-    fleet:    { hp: 8000, spd: 18, gold: 500, res: 60, r: 28, col: '#a78bfa', label: 'FROTA SUPREMA HIVEMIND', shape: 'boss', dmg: 12, isBoss: true, shield: 2500, isFleet: true }
+    fleet:    { hp: 8000, spd: 18, gold: 500, res: 60, r: 28, col: '#a3e635', label: 'FROTA SUPREMA HIVEMIND', shape: 'boss', dmg: 12, isBoss: true, shield: 2500, isFleet: true }
   };
   // ===== ULTRA: 100 variações procedurais (vida/vel/escudo/estilo) =====
   (function genVariants(){
@@ -475,7 +475,7 @@ var DO3 = (function () {
     { id:'arena', name:'Arena 360°: Geometry Wars', styleId:'arena', bg:'#0f172a', accent:'#34d399',
       enemyPool:['swarm','drone','phase','splitter'], duration:28, target:30, speed:1.35,
       desc:'Arena fechada twin-stick estilo Geometry Wars/Smash TV' },
-    { id:'tunnel', name:'Túnel 3D: Tempest', styleId:'tunnel', bg:'#050914', accent:'#a78bfa',
+    { id:'tunnel', name:'Túnel 3D: Tempest', styleId:'tunnel', bg:'#050914', accent:'#a3e635',
       enemyPool:['phase','wasp','bomber'], duration:30, target:32, speed:1.45,
       desc:'Túnel pseudo-3D com lanes estilo Tempest/Star Fox' },
   ];
@@ -509,7 +509,7 @@ var DO3 = (function () {
       { obj:'kill', n:4, name:'Sobrecarga', desc:'28 — tudo ao mesmo tempo', enemyPool:['swarm','phase','splitter','drone'], duration:26, target:28, speed:1.38 },
       { obj:'boss', n:5, name:'Mestre da Arena', desc:'BOSS — 32 + colosso', enemyPool:['colossus','phase','swarm'], duration:30, target:32, speed:1.48, boss:true },
     ]},
-    { id:'tunnel', name:'Campanha Tempest', styleId:'tunnel', bg:'#050914', accent:'#a78bfa', desc:'Túnel 3D — 5 fases até o coração', phases:[
+    { id:'tunnel', name:'Campanha Tempest', styleId:'tunnel', bg:'#050914', accent:'#a3e635', desc:'Túnel 3D — 5 fases até o coração', phases:[
       { obj:'kill', n:1, name:'Túnel Inicial', desc:'18 — aprenda as lanes', enemyPool:['phase'], duration:20, target:18, speed:1.0 },
       { obj:'kill', n:2, name:'Curvas', desc:'22 — wasps nas curvas', enemyPool:['wasp','phase'], duration:22, target:22, speed:1.12 },
       { obj:'survive', n:3, name:'Aceleração', desc:'26 — bombers velozes', enemyPool:['bomber','phase','wasp'], duration:24, target:26, speed:1.28 },
@@ -654,7 +654,26 @@ var DO3 = (function () {
           }
         }
       } catch (e) { /* storage indisponível */ }
+      if (this.repairProgress()) this.save();
       return this.data;
+    },
+    repairProgress() {
+      if (!this.data) return false;
+      const stars = this.data.mapStars || {};
+      let earnedUnlocks = 1;
+      Object.keys(stars).forEach(key => {
+        const idx = Number(key);
+        if (Number.isInteger(idx) && idx >= 0 && idx < MAPS_DATA.length && Number(stars[key]) > 0) {
+          earnedUnlocks = Math.max(earnedUnlocks, idx + 2);
+        }
+      });
+      const repaired = Math.min(
+        MAPS_DATA.length,
+        Math.max(1, Number(this.data.unlockedMap) || 1, earnedUnlocks)
+      );
+      const changed = repaired !== this.data.unlockedMap;
+      this.data.unlockedMap = repaired;
+      return changed;
     },
     save() {
       try {
@@ -697,7 +716,7 @@ var DO3 = (function () {
 
   const SUPERS = {
     ion:       { key: 'ion',       name: 'Canhão de Íons',        hot: 'Q', maxCd: 20, dmg: 520, radius: 88, color: '#38bdf8', targeted: true,  desc: 'Mira um ponto: feixe orbital colossal (520 dano puro + queimadura).' },
-    emp:       { key: 'emp',       name: 'Pulso PEM',             hot: 'W', maxCd: 26, color: '#a78bfa', desc: 'Pulso global: congela 5s, drena 70% escudos e atordoa.' },
+    emp:       { key: 'emp',       name: 'Pulso PEM',             hot: 'W', maxCd: 26, color: '#60a5fa', desc: 'Pulso global: congela 5s, drena 70% escudos e atordoa.' },
     vortex:    { key: 'vortex',    name: 'Vórtice Gravitacional', hot: 'E', maxCd: 30, radius: 110, dps: 42, dur: 6, color: '#22d3ee', targeted: true, desc: 'Buraco negro que suga e tritura por 6s (dano crescente).' },
     overdrive: { key: 'overdrive', name: 'Sobrecarga de Reator',  hot: 'R', maxCd: 36, dur: 9, rateMul: 2.2, color: '#fb923c', desc: '+120% cadência + projéteis em chamas por 9s.' }
   };
@@ -722,7 +741,7 @@ var DO3 = (function () {
       apply: S => { S.mutBuffs.splash = (S.mutBuffs.splash||0)+0.28; } },
     { id:'mut_shield', name:'Barreira de Contenção', desc:'+8 integridade máxima + cura 3 ao escolher.', color:'#34d399', icon:'⬡', tag:'DEFENSIVO',
       apply: S => { S.livesMax += 8; S.lives = Math.min(S.livesMax, S.lives+3); } },
-    { id:'mut_super', name:'Condensador Instável', desc:'-18% cooldown de TODAS as supers. Spamme sem parar.', color:'#a78bfa', icon:'⬢', tag:'ULTIMATE',
+    { id:'mut_super', name:'Condensador Instável', desc:'-18% cooldown de TODAS as supers. Spamme sem parar.', color:'#a3e635', icon:'⬢', tag:'ULTIMATE',
       apply: S => { S.mutBuffs.superCd = (S.mutBuffs.superCd||0)+0.18; for(const k in S.powers) S.powers[k].maxCd *= 0.82; } },
     { id:'mut_poison', name:'Cepa Virulenta', desc:'Veneno dura 45% mais e espalha em +1 alvo extra.', color:'#a3e635', icon:'☣', tag:'CONTROLE',
       apply: S => { S.mutBuffs.poison = (S.mutBuffs.poison||0)+1; } },

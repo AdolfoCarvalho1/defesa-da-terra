@@ -55,150 +55,180 @@
       R: (PAL && PAL.red) || '#f43f5e',
       V: (PAL && PAL.acid) || '#a3e635',
       B: (PAL && PAL.shieldBlue) || '#60a5fa',
-      P: (PAL && PAL.purple) || '#a78bfa'
+      P: (PAL && PAL.purple) || '#a3e635'
     };
   }
+  // Cada linha descreve somente a metade esquerda + o eixo central.
+  // O espelhamento garante cascos simétricos, contornos limpos e zero "pixel solto".
+  function mirrorRows(halves) {
+    return halves.map(source => {
+      const half = String(source).padEnd(11, '.').slice(0, 11);
+      const left = half.slice(0, 10);
+      return (left + half[10] + left.split('').reverse().join('')).replace(/\./g, ' ');
+    });
+  }
+  const ship = mirrorRows;
   const TOWER_ART = {
-    cannon: [
-      '       KK       ',
-      '      KWWK      ',
-      '   KKKKCCKKKK   ',
-      '  KCCEECCCEECCK ',
-      ' KKCCLLCCCCLLCKK',
-      'KCCLGGCCCCCGLLCK',
-      'KCEEGGCCCGGEEeck'.replace(/e/g,'E').replace(/c/g,'C'),
-      'KCCCCKDDDKCCCCCK',
-      ' KCCCDKKKDCCCK  ',
-      '  KKKKDOODKKKK  ',
-      '     KDYYODK    ',
-      '      KOOKK     '
-    ],
-    gatling: [
-      '     KWWWK      ',
-      '    KWCCWK      ',
-      ' KKKKCCCCKKKK   ',
-      'KCCLEECCLEELCCK ',
-      'KCCLLGCCLLGGLCKK',
-      'KCCEEGCEEGEEECCK',
-      'KCCCCKDDDCCCCCCY',
-      'KCCCKDKKKDKCCYKY',
-      ' KCCKDYYYDKCYKY ',
-      '  KKKDOOODKCKYK ',
-      '    KDYYYYDKKKK ',
-      '     KOOOKK     '
-    ],
-    laser: [
-      '      KWWK      ',
-      '     KWRRWK     ',
-      '  KKKKRCCRKKKK  ',
-      ' KRCLEERRCELCRK ',
-      'KRCLLGRREGRLLCRK',
-      'KRCCEERRRREECCRK',
-      'KRCCKRRWWWRRKCRK',
-      ' KRKDRRWYWRRDKRK',
-      '  KKDRRWYWRRDKK ',
-      '   KKDRROORDKK  ',
-      '     KDOOODK    ',
-      '      KOKK      '
-    ],
-    missile: [
-      '   KWK   KWK    ',
-      '  KOOWK KOOWK   ',
-      '  KOCWK KOCWK   ',
-      ' KKKOCCKKOCCKKK ',
-      'KOCCLECCEELCCCOX'.replace(/X/,'K'),
-      'OCLLLGCCCGLLLLCK',
-      'OCCEEGCCCCEEGCCK',
-      'OCCCKDDDDDKCCCCK',
-      'OCKKDKKKKKDKKKOK',
-      ' OKKDYYYYYYDKKO ',
-      '  KKOYYYYYYOKK  ',
-      '    KOOOOOK     '
-    ],
-    cryo: [
-      '      KGWK      ',
-      '   KKGWGWGKK    ',
-      '  KCCKCXCCKCCK  '.replace(/X/g,'G'),
-      ' KCCLLCGGGCLLCK ',
-      'KCCLGGCWGWCGGLCK',
-      'KCGEEGGCGWGGEEXK'.replace(/X/,'G'),
-      'KCGGKWGGGGWKGGCK',
-      ' KCKDWGGGGWDKCK ',
-      '  KKDGGGGGGDKK  ',
-      '   KKDGOOGDKK   ',
-      '    KDYOOYDK    ',
-      '     KKOOKK     '
-    ],
-    tesla: [
-      '      KYWK      ',
-      '     KWYWYK     ',
-      '  KKKKYCYKKKK   ',
-      ' KCCLEYCYELCCkK '.replace(/k/,'C'),
-      'KCCLLYCYCYLLCCKK',
-      'KCCEYGCWCGYEECCK',
-      'KCCYKWYWYWYKCCKK',
-      'KCCKDYWYWYDKCCK ',
-      ' KCKDYYWYYDKCK  ',
-      '  KKDYYYYYYDKK  ',
-      '   KKDOYOODKK   ',
-      '     KKOOUU'.replace(/U/,'K')
-    ],
-    sniper: [
-      '       KW       ',
-      '      KWCK      ',
-      '     KWCCWK     ',
-      '  KKKCCLLCKKK   ',
-      ' KCCLLLGCCLLCK  ',
-      'KCCLLGGWGGCLLCKK',
-      'KCCEEGWWWWGEECCK',
-      'KCCKDEWWWWEDKCCK',
-      ' KCKDDWWWWDDKCK ',
-      '  KKDDGWWGDDKK  ',
-      '    KDGOOGDK    ',
-      '     KKOOUK'.replace(/U/,'O')+'K'
-    ],
-    venom: [
-      '   KKKK KKKK    ',
-      '  KLVVK KLvvK   '.replace(/v/g,'V'),
-      ' KVLWVK KVLWVK  ',
-      ' KKKVLKKKLVLKKK ',
-      'KVLLLEEEEELLVVVK',
-      'VCLLGGEEEGGCLLCK',
-      'VCCEEGKKKGEECCVK',
-      'VCCDKKGVVGKKDCCK',
-      'OCKDDGGWWGGDDKCO',
-      ' OOKDGWYYWGDHKK '.replace(/H/,'D'),
-      '   KKDYYYYDKK   ',
-      '    KKOOOOKK    '
-    ],
-    amp: [
-      '     KWKWK      ',
-      '    KYYYYYK     ',
-      '  KKKYCWCYKKK   ',
-      ' KCLEYCWYCCELCK ',
-      'KCLLYCWWWYCLLXKK'.replace(/X/,'C'),
-      'KCLEYGWWGWGYELCK',
-      'KCEEGWWYWWGEECCK',
-      'KCKDDWWYWWDDKCKK',
-      ' KCKDWWYWWDKCK  ',
-      '  KKDWWYWWDKK   ',
-      '   KKOYYYOOK    ',
-      '    KKOOUKK'.replace(/U/,'O')
-    ],
-    rail: [
-      '      KWWK      ',
-      '     KWCCWK     ',
-      ' KKKKCCLLCKKKK  ',
-      'KCMMLLCCCCLLMKCK'.replace(/KCK/,'KCK'),
-      'KMMLLGCCCCGLLMKK',
-      'KMCEEGCCCCEEXMCK'.replace(/X/,'E'),
-      'KMCKDDCCCCCDDKKK'.replace('KKK','KMK'),
-      'KMKDDCCMMCCDDKMK',
-      ' KMDCCMMMCCDKMK ',
-      '  KKDCMMMCDKKK  ',
-      '    KDCMMCDK    ',
-      '     KKOOUK'.replace(/U/,'O')+'K'
-    ]
+    // Corveta Gauss — proa blindada, cockpit central e dois canhões frontais.
+    cannon: ship([
+      '........KKK',
+      '.......KWWG',
+      '.....KKKMMC',
+      '....KCCKMMM',
+      '..KKCCKMGGG',
+      '.KCCLLKMGGG',
+      'KCCLLCKMGGG',
+      'KCCCCKMMDDD',
+      '.KCCCKMDDDK',
+      '..KKKKDYYYO',
+      '....KKDOOOO',
+      '.....KDOOOO',
+      '......KOOOO'
+    ]),
+    // Caça Vulcan — nariz agudo, asas em flecha e motores duplos.
+    gatling: ship([
+      '..........K',
+      '.........KW',
+      '........KWG',
+      '.......KCCG',
+      '......KCLLG',
+      '...KKKKCLLG',
+      '.KKCCCLLMMM',
+      'KCCLLLMMGGG',
+      '..KKCCKMDGG',
+      '....KKMDYDO',
+      '......KDOOO',
+      '.......KOOO',
+      '........KOO'
+    ]),
+    // Destróier de Fótons — delta compacto em torno de um emissor axial.
+    laser: ship([
+      '..........K',
+      '.........KW',
+      '........KWR',
+      '.......KCRR',
+      '......KCLRR',
+      '....KKCLGRR',
+      '..KKCCLGRWW',
+      'KCCCLLGRWWW',
+      '..KCCKRRWWW',
+      '....KDRRYWO',
+      '.....KDRYOO',
+      '......KDOOO',
+      '.......KOOO'
+    ]),
+    // Bombardeiro MIRV — fuselagem larga, quatro baias e pods de mísseis nas asas.
+    missile: ship([
+      '........KKK',
+      '.......KGGG',
+      '......KMMMM',
+      '..KKKOKMCCC',
+      '.KOYOKCLLCC',
+      'KOYYOKCLGGC',
+      'KOYOKCCMMMD',
+      '.KKKKCCMDDD',
+      '..KCCCKDYYO',
+      '...KKKDYYOO',
+      '.....KDOOOO',
+      '......KOOOO',
+      '.......KOOO'
+    ]),
+    // Fragata Glacial — proa cristalina e aletas em forma de floco.
+    cryo: ship([
+      '.........KG',
+      '.......KKGW',
+      '......KGGWG',
+      '...K.KKCGGG',
+      '..KGKCLGWGG',
+      'KGGKCLGGWGG',
+      '.KGCCLGGWGG',
+      '..KCCKGGGGD',
+      '...KKDGGGDO',
+      '....KDGGYOO',
+      '.....KDGYOO',
+      '......KDOOO',
+      '.......KOOO'
+    ]),
+    // Cruzador Tempestade — duas bobinas laterais e espinha condutora dourada.
+    tesla: ship([
+      '.........KYW',
+      '........KWYW',
+      '.......KCYWY',
+      '....KKKCYWYC',
+      '..KYWKCLYWYC',
+      'KCYWYKCLGWYC',
+      'KCCYCKMGWYM',
+      '.KCCKDYWYWD',
+      '..KKKDYYWYD',
+      '....KDYYWYO',
+      '.....KDYYOO',
+      '......KDOOO',
+      '.......KOOO'
+    ]),
+    // Espectro Sniper — agulha longa, cockpit recuado e asas furtivas.
+    sniper: ship([
+      '..........W',
+      '.........KW',
+      '........KWC',
+      '.......KWCC',
+      '......KCLLG',
+      '....KKCLGGW',
+      '..KKCCLGWWW',
+      'KCCLLKMGWWW',
+      '...KCCKDWWW',
+      '.....KDDGWO',
+      '......KDGOO',
+      '.......KDOO',
+      '........KOO'
+    ]),
+    // Infectador Nanopraga — bio-nave manta com núcleo e vesículas simétricas.
+    venom: ship([
+      '........KVK',
+      '......KKVLV',
+      '....KKVLLWV',
+      '..KKVVCLGGV',
+      'KVVVCLLGGGV',
+      'KVVCLLGWGGV',
+      '.KVCCLGGGGV',
+      '..KVCKGVVGD',
+      '...KKDGVVDO',
+      '....KDGGWOO',
+      '.....KDYYOO',
+      '......KOOOO',
+      '.......KOOO'
+    ]),
+    // Porta-Naves Amplificadora — convés largo, hangar central e escoltas laterais.
+    amp: ship([
+      '........KYW',
+      '.......KYYY',
+      '.....KKYCWY',
+      '..KKKCCYCWY',
+      'KCCCLLYCWWW',
+      'KCLLLYGGWWW',
+      'KCCCKYGGWYG',
+      '.KCCKDDYWYD',
+      '..KKKDDYWYD',
+      '....KDDYYYO',
+      '.....KDYYOO',
+      '......KOOOO',
+      '.......KOOO'
+    ]),
+    // Encouraçado Railgun — trilho branco contínuo entre placas de blindagem pesada.
+    rail: ship([
+      '..........W',
+      '.........KW',
+      '........KWW',
+      '......KKMWW',
+      '...KKKMMWCC',
+      '.KKMMMLLWCC',
+      'KMMMCCLGWGG',
+      'KMMCCKDGWGG',
+      '.KMMCKDDWMD',
+      '..KKMDDDWMO',
+      '....KMDDWOO',
+      '.....KMDWOO',
+      '......KDOOO'
+    ])
   };
 
   // ===== INIMIGOS: chunky aliens com olhos / naves com cockpit =====
@@ -215,7 +245,7 @@
       C: defCol, L: tint(defCol, (TKN && TKN.PIXEL && TKN.PIXEL.LIGHT_FACTOR) || 0.35), E: tint(defCol, -0.25),
       R: (PAL && PAL.red) || '#f43f5e',
       Y: (PAL && PAL.gold) || '#fbbf24',
-      P: (PAL && PAL.purple) || '#a78bfa',
+      P: (PAL && PAL.purple) || '#a3e635',
       N: (PAL && PAL.green) || '#34d399',
       B: (PAL && PAL.shieldBlue) || '#60a5fa',
       O: (PAL && PAL.bioOrange) || '#f97316'
@@ -444,48 +474,34 @@
     pierce: ['.KW.', 'KWCK', 'KWCK', '.KK.'].map(s => s.replace(/\./g, ' '))
   };
 
-  // tier adds: pods extras nas asas + trim dourado + canos maiores + núcleo
+  // Tier adiciona detalhes internos simétricos; nunca altera o contorno da nave.
   function applyTierArt(rows, tier, pal) {
     if (tier <= 1) return rows;
     const w = rows[0].length;
     const out = rows.slice();
-    // pods de asa (colunas laterais) a partir do T2
-    const podChar = tier >= 3 ? 'Y' : 'L';
-    for (let y = 2; y < out.length - 2; y++) {
+    const cx = Math.floor(w / 2);
+    const paintPair = (y, offset, ch) => {
+      if (y < 0 || y >= out.length) return;
       const row = out[y].split('');
-      if (row[0] === 'K' && !podPlaced(out, y)) {
-        row[0] = podChar;
-      }
+      const lx = cx - offset, rx = cx + offset;
+      if (row[lx] && row[lx] !== ' ' && row[lx] !== 'K') row[lx] = ch;
+      if (row[rx] && row[rx] !== ' ' && row[rx] !== 'K') row[rx] = ch;
       out[y] = row.join('');
-    }
-    // trim dourado no nariz (linha superior) T3+
-    if (tier >= 3) {
-      const top = out[0].split('');
-      for (let x = 0; x < top.length; x++) {
-        if (out[1] && out[1][x] === 'W' && top[x] !== ' ') top[x] = 'Y';
-      }
-      out[0] = top.join('');
-    }
-    // núcleo brilhante central T4+
+    };
+    const bodyY = Math.floor(out.length * 0.48);
+    if (tier >= 2) paintPair(bodyY, 3, 'L');       // luzes de asa
+    if (tier >= 3) paintPair(bodyY + 2, 5, 'Y');   // acabamento de esquadrão
     if (tier >= 4) {
-      const cy = Math.floor(out.length / 2);
-      const row = out[cy].split('');
-      const cx = Math.floor(w / 2);
-      if (row[cx] !== ' ') row[cx] = 'W';
-      if (pal.W) { /* W já é branco puro */ }
-      out[cy] = row.join('');
+      const row = out[bodyY].split('');
+      if (row[cx] !== ' ' && row[cx] !== 'K') row[cx] = 'W';
+      out[bodyY] = row.join('');
     }
-    // aura dourada em volta T5
     if (tier >= 5) {
-      out.unshift(new Array(w).fill(' ').join(''));
-      out.push(new Array(w).fill(' ').join(''));
-      const first = out[1].split('');
-      for (let x = 0; x < first.length; x++) if (first[x] !== ' ') { first[x] = 'Y'; break; }
-      out[1] = first.join('');
+      paintPair(bodyY - 1, 2, 'Y');
+      paintPair(bodyY + 1, 4, 'W');
     }
     return out;
   }
-  function podPlaced(rows, y) { return false; }
 
   function buildTowerTextures(scene) {
     for (const def of (window.DO3 ? window.DO3.TOWERS_DATA : [])) {
@@ -501,14 +517,14 @@
         g.generateTexture(key, Math.max(16, size.w), Math.max(16, size.h));
         g.destroy();
       }
-      // legado: tur_<id>_1 continua existindo (algumas cenas usam)
-      if (!scene.textures.exists('tur_' + def.id + '_1')) {
-        const rows = applyTierArt(base, 1, pal);
-        const g = scene.make.graphics({ x: 0, y: 0, add: false });
-        const size = drawRows(g, rows, pal);
-        g.generateTexture('tur_' + def.id + '_1', Math.max(16, size.w), Math.max(16, size.h));
-        g.destroy();
-      }
+      // Legado também recebe a arte nova; makeTextures cria uma versão vetorial antes do PXART.
+      const legacyKey = 'tur_' + def.id + '_1';
+      try { if (scene.textures.exists(legacyKey)) scene.textures.remove(legacyKey); } catch (e) {}
+      const rows = applyTierArt(base, 1, pal);
+      const g = scene.make.graphics({ x: 0, y: 0, add: false });
+      const size = drawRows(g, rows, pal);
+      g.generateTexture(legacyKey, Math.max(16, size.w), Math.max(16, size.h));
+      g.destroy();
     }
   }
 

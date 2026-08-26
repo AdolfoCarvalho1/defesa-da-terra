@@ -331,6 +331,62 @@ DO.fireTower(ST, gw, tgtG, DO.getTowerStats(ST, gw));
 check('gatling T5 dispara rajada de 6 tracantes', ST.projectiles.filter(p => p.kind === 'bullet').length === 6,
   'n=' + ST.projectiles.length);
 
+/* ---------- T8: progressão persistente de mapas e campanhas ---------- */
+console.log('\n[T8] vitória libera o próximo mapa/fase');
+const saveBeforeProgress = D.Save.data;
+D.Save.data = D.Save.defaults();
+const SP0 = DO.startNewGame(0, 'normal', false);
+DO.finalizeEnd(SP0, 'victory');
+check('vencer mapa 1 libera mapa 2', D.Save.data.unlockedMap === 2, 'unlockedMap=' + D.Save.data.unlockedMap);
+const SP1 = DO.startNewGame(1, 'normal', false);
+DO.finalizeEnd(SP1, 'victory');
+check('vencer mapa 2 libera mapa 3', D.Save.data.unlockedMap === 3, 'unlockedMap=' + D.Save.data.unlockedMap);
+const SP2 = DO.startNewGame(2, 'normal', false);
+DO.finalizeEnd(SP2, 'victory');
+check('vencer mapa 3 libera mapa 4', D.Save.data.unlockedMap === 4, 'unlockedMap=' + D.Save.data.unlockedMap);
+D.Save.data.unlockedMap = 3;
+const fakeClasses = new Set();
+const fakeStars = { innerHTML: '' };
+const fakeCard = {
+  classList: { toggle(name, on){ if(on) fakeClasses.add(name); else fakeClasses.delete(name); } },
+  tabIndex: 0,
+  attrs: {},
+  setAttribute(name, value){ this.attrs[name] = value; },
+  querySelector(sel){ return sel === '.m-stars' ? fakeStars : null; }
+};
+DO.syncMapCardState(fakeCard, 3);
+check('mapa 4 começa bloqueado no cartão', fakeClasses.has('locked') && fakeCard.attrs['aria-disabled'] === 'true');
+D.Save.data.unlockedMap = 4;
+DO.syncMapCardState(fakeCard, 3);
+check('cartão do mapa 4 desbloqueia sem recarregar a página', !fakeClasses.has('locked') && fakeCard.attrs['aria-disabled'] === 'false' && fakeCard.tabIndex === 0);
+D.Save.data.unlockedMap = 3;
+D.Save.data.mapStars[2] = 3;
+check('save antigo com mapa 3 concluído é reparado automaticamente', D.Save.repairProgress() && D.Save.data.unlockedMap === 4);
+const campaignSave = D.Save.defaults();
+check('vencer fase 1 libera fase 2', DO.recordNaveProgress(campaignSave, 'asteroids', 0, 3, true) === 2);
+check('vencer fase 2 libera fase 3', DO.recordNaveProgress(campaignSave, 'asteroids', 1, 2, true) === 3);
+check('falha não libera fase seguinte', DO.recordNaveProgress(campaignSave, 'asteroids', 2, 1, false) === 3);
+check('estrelas da fase ficam persistidas', campaignSave.naveStars.asteroids[0] === 3 && campaignSave.naveStars.asteroids[1] === 2);
+D.Save.data = saveBeforeProgress;
+
+/* ---------- T9: vitória → infinito preserva a partida ---------- */
+console.log('\n[T9] continuar no infinito mantém a defesa atual');
+D.Save.data = D.Save.defaults();
+const SE = DO.startNewGame(0, 'normal', false);
+SE.wave = SE.map.waves.length;
+SE.credits = 777;
+SE.lives = 13;
+SE.towers.push({ id:'keep-me' });
+const towerRef = SE.towers[0];
+DO.finalizeEnd(SE, 'victory');
+check('vitória libera o próximo setor antes do infinito', D.Save.data.unlockedMap === 2);
+check('opção infinito aceita apenas resultado de vitória', DO.continueEndlessAfterVictory(SE) === true);
+check('infinito preserva onda, torres, créditos e vidas', SE.wave === SE.map.waves.length && SE.towers[0] === towerRef && SE.credits === 777 && SE.lives === 13);
+check('partida volta ao estado pronto em modo infinito', SE.endless === true && SE.state === 'idle' && SE.result === null);
+DO.startNextWave(SE);
+check('primeira onda extra continua após o final normal', SE.wave === SE.map.waves.length + 1 && SE.state === 'combat');
+D.Save.data = saveBeforeProgress;
+
 /* ---------- resultado ---------- */
 console.log('\n==========================================');
 console.log('SMOKE RESULT: ' + pass + ' PASS / ' + fail + ' FAIL');

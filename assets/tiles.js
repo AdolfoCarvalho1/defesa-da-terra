@@ -6,57 +6,79 @@
 (function(){
   const CELL = 44;
   const THEMES = {
-    'neptune-frontier': { bg:'#051425', accent:'#38bdf8', accent2:'#67e8f9', speck:'#0a2a4a' },
-    'saturn-rings':     { bg:'#1a1408', accent:'#fbbf24', accent2:'#f59e0b', speck:'#3a2a0a' },
-    'jupiter-orbit':    { bg:'#1a0f08', accent:'#fb923c', accent2:'#f97316', speck:'#3a1a08' },
-    'asteroid-belt':    { bg:'#0f0a14', accent:'#94a3b8', accent2:'#64748b', speck:'#1e1a2a' },
-    'earth-orbit':      { bg:'#051425', accent:'#22d3ee', accent2:'#38bdf8', speck:'#0a2a3a' },
-    'solar-system':     { bg:'#020617', accent:'#a78bfa', accent2:'#fbbf24', speck:'#1e1b4b' }
+    'neptune-frontier': { bg:'#051425', accent:'#38bdf8', accent2:'#67e8f9', speck:'#0a2a4a', motif:'ice' },
+    'saturn-rings':     { bg:'#1a1408', accent:'#fbbf24', accent2:'#f59e0b', speck:'#3a2a0a', motif:'rings' },
+    'jupiter-orbit':    { bg:'#1a0f08', accent:'#fb923c', accent2:'#f97316', speck:'#3a1a08', motif:'storm' },
+    'asteroid-belt':    { bg:'#0f0a14', accent:'#94a3b8', accent2:'#64748b', speck:'#1e1a2a', motif:'rock' },
+    'earth-orbit':      { bg:'#051425', accent:'#22d3ee', accent2:'#38bdf8', speck:'#0a2a3a', motif:'orbit' },
+    'solar-system':     { bg:'#020617', accent:'#a3e635', accent2:'#fbbf24', speck:'#17230a', motif:'nav' }
   };
 
   function hexToNum(hex){ return parseInt(hex.slice(1),16); }
 
   function drawTile(g, theme, variant){
     const t = THEMES[theme] || THEMES['neptune-frontier'];
-    // base navy com variação de cor por tema — bem menos monocromático
     g.fillStyle(hexToNum('#050914'),1); g.fillRect(0,0,CELL,CELL);
     g.fillStyle(hexToNum(t.bg),1); g.fillRect(0,0,CELL,CELL);
-    // overlay com accent2 para dar tom quente/frio por tema
-    g.fillStyle(hexToNum(t.accent2),0.09); g.fillRect(0,0,CELL,CELL);
-    // segundo overlay com speck para profundidade
-    g.fillStyle(hexToNum(t.speck),0.07); g.fillRect(0,0,CELL,CELL);
-    // borda 1px com accent .16
-    g.lineStyle(1, hexToNum(t.accent), 0.16); g.strokeRect(0,0,CELL,CELL);
-    // speck pixelado vibrante (10 specks 2x2 com 6 cores por tema)
-    let seed = theme.charCodeAt(0)*100 + variant.charCodeAt(0)*13;
-    function rnd(){ seed=(seed*9301+49297)%233280; return seed/233280; }
-    const speckCols = [t.speck, t.accent, t.accent2, '#fbbf24', '#f43f5e', '#34d399', '#a78bfa'];
-    for(let i=0;i<10;i++){
-      const x=Math.floor(rnd()*(CELL-3)), y=Math.floor(rnd()*(CELL-3));
-      const c = speckCols[i % speckCols.length];
-      g.fillStyle(hexToNum(c), 0.24 + rnd()*0.14);
-      g.fillRect(x,y,2,2);
-      if(i%2===0){ g.fillStyle(hexToNum(c),0.12); g.fillRect(x+2,y,1,1); }
-      if(i%4===0){ g.fillStyle(0xffffff,0.14); g.fillRect(x,y+2,1,1); }
+    g.fillStyle(hexToNum(t.speck),0.16); g.fillRect(0,0,CELL,CELL);
+    g.lineStyle(1, hexToNum(t.accent), 0.10); g.strokeRect(0,0,CELL,CELL);
+    const alt = variant==='b';
+    if(t.motif==='ice'){
+      g.lineStyle(1,hexToNum(t.accent2),0.18);
+      g.lineBetween(alt?4:10,0,alt?26:32,22); g.lineBetween(alt?26:32,22,alt?18:38,44);
+      g.lineBetween(alt?26:32,22,44,alt?15:29);
+      g.fillStyle(0xffffff,0.16); g.fillRect(alt?7:34,alt?31:8,2,2);
+    } else if(t.motif==='rings'){
+      g.fillStyle(hexToNum(t.accent),0.08); g.fillRect(0,alt?9:5,CELL,5); g.fillRect(0,alt?29:25,CELL,3);
+      g.fillStyle(hexToNum(t.accent2),0.16); g.fillRect(0,alt?12:8,CELL,1); g.fillRect(0,alt?32:28,CELL,1);
+    } else if(t.motif==='storm'){
+      g.fillStyle(hexToNum(t.accent),0.10); g.fillRect(0,6,CELL,4); g.fillRect(0,26,CELL,5);
+      g.fillStyle(hexToNum(t.accent2),0.18); g.fillRect(alt?7:27,alt?16:17,10,3); g.fillRect(alt?10:30,alt?19:20,6,2);
+    } else if(t.motif==='rock'){
+      g.fillStyle(hexToNum(t.accent2),0.16); g.fillRect(alt?5:28,alt?7:8,9,7); g.fillRect(alt?29:8,alt?27:29,7,6);
+      g.fillStyle(0x050914,0.28); g.fillRect(alt?8:31,alt?9:10,3,3); g.fillRect(alt?31:10,alt?29:31,2,2);
+    } else if(t.motif==='orbit'){
+      g.lineStyle(1,hexToNum(t.accent2),0.17); g.strokeCircle(alt?12:32,alt?31:13,10);
+      g.fillStyle(hexToNum(t.accent),0.24); g.fillRect(alt?20:21,alt?8:34,3,3);
+      g.fillStyle(0xffffff,0.20); g.fillRect(alt?4:38,alt?12:28,1,1);
+    } else {
+      g.lineStyle(1,hexToNum(t.accent),0.16); g.lineBetween(6,22,38,22); g.lineBetween(22,6,22,38);
+      g.fillStyle(hexToNum(t.accent2),0.24); g.fillRect(19,19,7,7); g.fillStyle(hexToNum(t.bg),1); g.fillRect(21,21,3,3);
     }
-    // detalhe central 3x3 com accent + brilho
-    g.fillStyle(hexToNum(t.accent),0.13);
-    g.fillRect(CELL/2-1, CELL/2-1, 3,3);
-    g.fillStyle(0xffffff,0.08); g.fillRect(CELL/2-1, CELL/2-1, 1,1);
-    // estrelas fixas
-    g.fillStyle(0xffffff,0.22); g.fillRect(8,8,1,1); g.fillRect(CELL-8, 12,1,1); g.fillRect(14, CELL-10,1,1);
+    g.fillStyle(0xffffff,0.18); g.fillRect(alt?35:8,alt?11:8,1,1); g.fillRect(alt?13:35,alt?36:33,1,1);
   }
-  function drawPathTile(g, theme){
+  function drawPathTile(g, theme, mask){
     const t = THEMES[theme] || THEMES['neptune-frontier'];
-    // path tile pixel art: corredor 44px (largura original) — não mais largo, só mais comprido via rotas
-    g.fillStyle(hexToNum('#162649'),1); g.fillRect(0,0,CELL,CELL);
-    g.fillStyle(hexToNum('#1e3a5f'),1); g.fillRect(2,2,CELL-4,CELL-4);
-    g.fillStyle(hexToNum('#1a2a4a'),0.85); g.fillRect(4,4,CELL-8,CELL-8);
-    g.lineStyle(1, hexToNum(t.accent), 0.42); g.strokeRect(0,0,CELL,CELL);
-    g.lineStyle(1, hexToNum('#fbbf24'), 0.08); g.strokeRect(1,1,CELL-2,CELL-2);
-    g.fillStyle(hexToNum(t.accent), 0.14); g.fillRect(CELL/2-2, CELL/2-2, 4,4);
-    g.fillStyle(hexToNum(t.accent), 0.28); g.fillRect(CELL/2-1, CELL/2-1, 2,2);
-    g.fillStyle(hexToNum(t.accent2), 0.16); g.fillRect(4,4,2,2); g.fillRect(CELL-6,4,2,2); g.fillRect(4,CELL-6,2,2); g.fillRect(CELL-6,CELL-6,2,2);
+    const up=mask&1,right=mask&2,down=mask&4,left=mask&8;
+    const arm=(col,alpha,inset)=>{
+      g.fillStyle(hexToNum(col),alpha);
+      g.fillRect(inset,inset,CELL-inset*2,CELL-inset*2);
+      if(up) g.fillRect(inset,0,CELL-inset*2,CELL/2+1);
+      if(right) g.fillRect(CELL/2-1,inset,CELL/2+1,CELL-inset*2);
+      if(down) g.fillRect(inset,CELL/2-1,CELL-inset*2,CELL/2+1);
+      if(left) g.fillRect(0,inset,CELL/2+1,CELL-inset*2);
+    };
+    arm('#080d18',0.96,5);
+    arm('#263753',1,9);
+    g.fillStyle(hexToNum('#344968'),0.82); g.fillRect(12,12,20,20);
+    g.fillStyle(hexToNum(t.accent),0.32);
+    if(left){g.fillRect(1,21,10,2);g.fillRect(13,21,6,2);} if(right){g.fillRect(25,21,6,2);g.fillRect(33,21,10,2);}
+    if(up){g.fillRect(21,1,2,10);g.fillRect(21,13,2,6);} if(down){g.fillRect(21,25,2,6);g.fillRect(21,33,2,10);}
+    g.fillStyle(hexToNum(t.accent2),0.42); g.fillRect(12,12,2,2); g.fillRect(30,12,2,2); g.fillRect(12,30,2,2); g.fillRect(30,30,2,2);
+    g.fillStyle(0xffffff,0.12); g.fillRect(14,14,8,1); g.fillRect(14,15,1,6);
+  }
+
+  function paintPreviewBackdrop(ctx,w,h,theme){
+    const t=THEMES[theme]||THEMES['neptune-frontier'];
+    ctx.save(); ctx.fillStyle=t.bg; ctx.fillRect(0,0,w,h); ctx.globalAlpha=0.22; ctx.fillStyle=t.speck; ctx.fillRect(0,0,w,h);
+    ctx.strokeStyle=t.accent; ctx.fillStyle=t.accent2; ctx.lineWidth=1;
+    if(t.motif==='rings') for(let y=8;y<h;y+=18){ctx.globalAlpha=0.10;ctx.fillRect(0,y,w,4);ctx.globalAlpha=0.18;ctx.fillRect(0,y,w,1);}
+    else if(t.motif==='storm') for(let y=6;y<h;y+=15){ctx.globalAlpha=0.10;ctx.fillRect(0,y,w,3);}
+    else if(t.motif==='ice'){ctx.globalAlpha=0.16;for(let x=-20;x<w;x+=42){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x+32,h);ctx.stroke();}}
+    else if(t.motif==='rock'){ctx.globalAlpha=0.14;for(let x=12;x<w;x+=38){const y=(x*7)%h;ctx.fillStyle=t.accent2;ctx.fillRect(x,y,9,7);ctx.fillStyle=t.bg;ctx.fillRect(x+3,y+2,2,2);}}
+    else if(t.motif==='orbit'){ctx.globalAlpha=0.16;ctx.beginPath();ctx.arc(w*.65,h*.45,Math.min(w,h)*.32,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.arc(w*.65,h*.45,Math.min(w,h)*.2,0,Math.PI*2);ctx.stroke();}
+    else {ctx.globalAlpha=0.14;ctx.beginPath();ctx.moveTo(0,h/2);ctx.lineTo(w,h/2);ctx.moveTo(w/2,0);ctx.lineTo(w/2,h);ctx.stroke();}
+    ctx.globalAlpha=0.24;ctx.fillStyle='#fff';[[9,9],[w-13,14],[w*.36,h-11],[w*.72,h*.3]].forEach(p=>ctx.fillRect(Math.round(p[0]),Math.round(p[1]),1,1));ctx.restore();
   }
 
   function buildAll(scene){
@@ -70,26 +92,24 @@
         g.generateTexture(key, CELL, CELL);
         g.destroy();
       }
-      // path tile pixel art para cada tema — força regen se já existir (nova versão mais clara)
-      const pathKey='tile_path_'+theme;
-      if(scene.textures.exists(pathKey)){
-        try{ scene.textures.remove(pathKey); }catch(e){ try{ scene.textures.get(pathKey).destroy(); }catch(e2){} }
+      // 16 peças de pista conectáveis: U/R/D/L em bitmask 1/2/4/8.
+      for(let mask=0;mask<16;mask++){
+        const pathKey='tile_path_'+theme+'_'+mask;
+        if(scene.textures.exists(pathKey)){ try{ scene.textures.remove(pathKey); }catch(e){} }
+        const g=scene.make.graphics({x:0,y:0,add:false}); drawPathTile(g,theme,mask); g.generateTexture(pathKey,CELL,CELL); g.destroy();
       }
-      {
-        const g=scene.make.graphics({x:0,y:0,add:false});
-        drawPathTile(g, theme);
-        g.generateTexture(pathKey, CELL, CELL);
-        g.destroy();
-      }
-      // bg tile genérico para board (usa variant a) — força regen também
+      const legacyPath='tile_path_'+theme;
+      if(scene.textures.exists(legacyPath)){ try{ scene.textures.remove(legacyPath); }catch(e){} }
+      { const g=scene.make.graphics({x:0,y:0,add:false}); drawPathTile(g,theme,15); g.generateTexture(legacyPath,CELL,CELL); g.destroy(); }
+      // fundo 2×2 alternado evita repetição óbvia do mesmo tile.
       const bgKey='tile_bg_'+theme;
       if(scene.textures.exists(bgKey)){
         try{ scene.textures.remove(bgKey); }catch(e){ try{ scene.textures.get(bgKey).destroy(); }catch(e2){} }
       }
       {
         const g=scene.make.graphics({x:0,y:0,add:false});
-        drawTile(g, theme, 'a');
-        g.generateTexture(bgKey, CELL, CELL);
+        [['a','b'],['b','a']].forEach((row,ry)=>row.forEach((v,rx)=>{g.save();g.translateCanvas(rx*CELL,ry*CELL);drawTile(g,theme,v);g.restore();}));
+        g.generateTexture(bgKey, CELL*2, CELL*2);
         g.destroy();
       }
       // miniatura 44*3 para preview cards (pixel art)
@@ -122,5 +142,5 @@
     };
   }
 
-  window.TILES = { THEMES, buildAll, cssForTheme, CELL };
+  window.TILES = { THEMES, buildAll, cssForTheme, paintPreviewBackdrop, CELL };
 })();

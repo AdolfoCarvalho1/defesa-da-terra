@@ -20,7 +20,7 @@
     // Alertas
     red: '#f43f5e', red2: '#fb7185',
     green: '#34d399',
-    purple: '#a78bfa',
+    purple: '#a3e635', // alias legado: a identidade atual usa verde ácido, nunca roxo
     orange: '#fb923c'
   };
 
