@@ -5,16 +5,53 @@
    Chaves: tile_<theme>_<variant>  (ex: tile_neptune-frontier_a) */
 (function(){
   const CELL = 44;
+  // S2 SUNSET: paleta crepuscular (sem roxo) — céu poeira, âmbar, creme.
+  const DUSK_SKY = '#1c2b4d', DUSK_AMBER = '#f5a83d', DUSK_CREAM = '#ffe9bd';
   const THEMES = {
     'neptune-frontier': { bg:'#051425', accent:'#38bdf8', accent2:'#67e8f9', speck:'#0a2a4a', motif:'ice' },
     'saturn-rings':     { bg:'#1a1408', accent:'#fbbf24', accent2:'#f59e0b', speck:'#3a2a0a', motif:'rings' },
     'jupiter-orbit':    { bg:'#1a0f08', accent:'#fb923c', accent2:'#f97316', speck:'#3a1a08', motif:'storm' },
     'asteroid-belt':    { bg:'#0f0a14', accent:'#94a3b8', accent2:'#64748b', speck:'#1e1a2a', motif:'rock' },
     'earth-orbit':      { bg:'#051425', accent:'#22d3ee', accent2:'#38bdf8', speck:'#0a2a3a', motif:'orbit' },
-    'solar-system':     { bg:'#020617', accent:'#a3e635', accent2:'#fbbf24', speck:'#17230a', motif:'nav' }
+    'solar-system':     { bg:'#020617', accent:'#a3e635', accent2:'#fbbf24', speck:'#17230a', motif:'nav' },
+    'sunset-dusk':      { bg:'#1c2b4d', accent:'#f5a83d', accent2:'#ffe9bd', speck:'#3a2c1a', motif:'dusk', dusk:true }
   };
 
   function hexToNum(hex){ return parseInt(hex.slice(1),16); }
+
+  // S2.1 — céu crepuscular (Phaser Graphics, origem relativa): brilho
+  // âmbar no horizonte (borda inferior) + vinheta fria no topo.
+  function paintDuskSky(g, w, h){
+    const bands = 6, bh = Math.max(2, Math.ceil(h * 0.07));
+    for(let i=0;i<bands;i++){
+      const t = i / (bands - 1); // 0 = alto do brilho -> 1 = horizonte
+      g.fillStyle(hexToNum(DUSK_AMBER), 0.04 + t * 0.20);
+      g.fillRect(0, h - (i + 1) * bh, w, bh);
+    }
+    g.fillStyle(hexToNum(DUSK_AMBER), 0.35); g.fillRect(0, h - 2, w, 1);
+    g.fillStyle(hexToNum(DUSK_CREAM), 0.22); g.fillRect(0, h - 3, w, 1);
+    const vh = Math.max(2, Math.ceil(h * 0.06));
+    for(let i=0;i<5;i++){
+      g.fillStyle(hexToNum(DUSK_SKY), 0.30 - (i / 5) * 0.24);
+      g.fillRect(0, i * vh, w, vh + 1);
+    }
+  }
+
+  // S2.1 — equivalente Canvas2D (previews DOM dos map-cards).
+  function paintDuskSky2d(ctx, w, h){
+    ctx.save();
+    let gr = ctx.createLinearGradient(0, h * 0.45, 0, h);
+    gr.addColorStop(0, 'rgba(245,168,61,0)');
+    gr.addColorStop(1, 'rgba(245,168,61,0.42)');
+    ctx.fillStyle = gr; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(245,168,61,0.35)'; ctx.fillRect(0, h - 2, w, 1);
+    ctx.fillStyle = 'rgba(255,233,189,0.22)'; ctx.fillRect(0, h - 3, w, 1);
+    gr = ctx.createLinearGradient(0, 0, 0, h * 0.35);
+    gr.addColorStop(0, 'rgba(10,16,34,0.42)');
+    gr.addColorStop(1, 'rgba(10,16,34,0)');
+    ctx.fillStyle = gr; ctx.fillRect(0, 0, w, Math.ceil(h * 0.35));
+    ctx.restore();
+  }
 
   function drawTile(g, theme, variant){
     const t = THEMES[theme] || THEMES['neptune-frontier'];
@@ -41,11 +78,19 @@
       g.lineStyle(1,hexToNum(t.accent2),0.17); g.strokeCircle(alt?12:32,alt?31:13,10);
       g.fillStyle(hexToNum(t.accent),0.24); g.fillRect(alt?20:21,alt?8:34,3,3);
       g.fillStyle(0xffffff,0.20); g.fillRect(alt?4:38,alt?12:28,1,1);
+    } else if(t.motif==='dusk'){
+      // S2 SUNSET: estratos horizontais âmbar sobre céu poeira + fagulhas creme.
+      g.fillStyle(hexToNum(t.accent),0.10); g.fillRect(0,8,CELL,3); g.fillRect(0,18,CELL,2);
+      g.fillStyle(hexToNum(t.accent),0.22); g.fillRect(0,30,CELL,4);
+      g.fillStyle(hexToNum(t.accent2),0.14); g.fillRect(0,33,CELL,1);
+      g.fillStyle(hexToNum(t.accent2),0.30); g.fillRect(alt?9:27,alt?14:12,2,2);
+      g.fillStyle(hexToNum(t.accent),0.30); g.fillRect(alt?30:10,alt?22:24,1,1);
     } else {
       g.lineStyle(1,hexToNum(t.accent),0.16); g.lineBetween(6,22,38,22); g.lineBetween(22,6,22,38);
       g.fillStyle(hexToNum(t.accent2),0.24); g.fillRect(19,19,7,7); g.fillStyle(hexToNum(t.bg),1); g.fillRect(21,21,3,3);
     }
     g.fillStyle(0xffffff,0.18); g.fillRect(alt?35:8,alt?11:8,1,1); g.fillRect(alt?13:35,alt?36:33,1,1);
+    if(t.dusk) paintDuskSky(g, CELL, CELL);
   }
   function drawPathTile(g, theme, mask){
     const t = THEMES[theme] || THEMES['neptune-frontier'];
@@ -77,8 +122,10 @@
     else if(t.motif==='ice'){ctx.globalAlpha=0.16;for(let x=-20;x<w;x+=42){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x+32,h);ctx.stroke();}}
     else if(t.motif==='rock'){ctx.globalAlpha=0.14;for(let x=12;x<w;x+=38){const y=(x*7)%h;ctx.fillStyle=t.accent2;ctx.fillRect(x,y,9,7);ctx.fillStyle=t.bg;ctx.fillRect(x+3,y+2,2,2);}}
     else if(t.motif==='orbit'){ctx.globalAlpha=0.16;ctx.beginPath();ctx.arc(w*.65,h*.45,Math.min(w,h)*.32,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.arc(w*.65,h*.45,Math.min(w,h)*.2,0,Math.PI*2);ctx.stroke();}
+    else if(t.motif==='dusk'){ctx.globalAlpha=0.12;ctx.fillStyle=t.accent;for(let y=10;y<h;y+=16){ctx.fillRect(0,y,w,3);}ctx.globalAlpha=0.22;ctx.fillRect(0,h-12,w,5);}
     else {ctx.globalAlpha=0.14;ctx.beginPath();ctx.moveTo(0,h/2);ctx.lineTo(w,h/2);ctx.moveTo(w/2,0);ctx.lineTo(w/2,h);ctx.stroke();}
     ctx.globalAlpha=0.24;ctx.fillStyle='#fff';[[9,9],[w-13,14],[w*.36,h-11],[w*.72,h*.3]].forEach(p=>ctx.fillRect(Math.round(p[0]),Math.round(p[1]),1,1));ctx.restore();
+    if(t.dusk) paintDuskSky2d(ctx,w,h);
   }
 
   function buildAll(scene){
@@ -127,6 +174,7 @@
       // path preview: desenha 3 blocos centrais como exemplo
       g2.fillStyle(hexToNum('#0d1526'),0.9); g2.fillRect(10,38,44,12); g2.fillRect(54,38,44,12); g2.fillRect(76,26,12,24);
       g2.lineStyle(1, hexToNum(THEMES[theme].accent),0.35); g2.strokeRect(10,38,44,12); g2.strokeRect(54,38,44,12);
+      if(THEMES[theme].dusk) paintDuskSky(g2, 132, 88);
       g2.generateTexture(keyMini,132,88);
       g2.destroy();
     }
@@ -135,6 +183,11 @@
   // Background helpers para DOM/CSS
   function cssForTheme(theme){
     const t=THEMES[theme]||THEMES['neptune-frontier'];
+    if(t.dusk) return {
+      bg: 'radial-gradient(900px 500px at 50% 0%, '+t.bg+' 0%, #050914 62%, #030712 100%), linear-gradient(180deg, rgba(10,16,34,0.42) 0%, rgba(245,168,61,0) 55%, rgba(245,168,61,0.30) 100%)',
+      accent: t.accent,
+      speck: t.speck
+    };
     return {
       bg: 'radial-gradient(900px 500px at 50% 0%, '+t.bg+' 0%, #050914 65%, #030712 100%)',
       accent: t.accent,
@@ -142,5 +195,5 @@
     };
   }
 
-  window.TILES = { THEMES, buildAll, cssForTheme, paintPreviewBackdrop, CELL };
+  window.TILES = { THEMES, buildAll, cssForTheme, paintPreviewBackdrop, paintDuskSky, paintDuskSky2d, CELL };
 })();

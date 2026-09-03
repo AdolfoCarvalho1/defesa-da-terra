@@ -123,6 +123,23 @@ const path = require('path');
   await page.click('#btn-resume');
   await page.waitForTimeout(200);
   check('pause fechou', await page.locator('#pause-overlay.hidden').count() === 1);
+  // U-ASTRO pausa (1ª sessão: 1 clique = 1 toggle; astronauta ao lado do título)
+  await page.click('#btn-pause');
+  await page.waitForTimeout(300);
+  check('U pausa: astronauta ao lado do título', await page.locator('#pause-overlay:not(.hidden) #astro-pause').count() === 1);
+  const uPausePx = await page.evaluate(() => {
+    const cv = document.getElementById('astro-pause');
+    if (!cv) return -1;
+    const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+    let n = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+    return n;
+  });
+  check('U pausa: astronauta pintado', uPausePx > 50, `px=${uPausePx}`);
+  await page.screenshot({ path: 'u-pause.png' });
+  await page.click('#btn-resume');
+  await page.waitForTimeout(200);
+  check('U pausa: retomou', await page.locator('#pause-overlay.hidden').count() === 1);
   const speedBefore = await page.locator('#btn-speed').textContent();
   // clique robusto via evaluate + wait (evita flake de hitbox clip-path)
   await page.evaluate(() => document.getElementById('btn-speed') && document.getElementById('btn-speed').click());
@@ -142,13 +159,64 @@ const path = require('path');
   await page.waitForTimeout(150);
   check('mute toggle', true); // só verifica não crash
 
-  // 10) Inicia onda e verifica combo/mutação não crash
-  await page.keyboard.press('Space'); // inicia onda
+  // 10) Botão ▶ ONDA inicia a onda (Espaço agora é só pausa)
+  await page.click('#btn-nextwave');
   await page.waitForTimeout(800);
+  // Espaço = exclusivamente play/pause
+  await page.keyboard.press('Space');
+  await page.waitForTimeout(250);
+  check('espaço pausa', await page.locator('#pause-overlay:not(.hidden)').count() === 1);
+  await page.keyboard.press('Space');
+  await page.waitForTimeout(250);
+  check('espaço retoma', await page.locator('#pause-overlay.hidden').count() === 1);
   check('onda iniciada (wave ring)', await page.locator('#hud-wave-num').textContent() !== '1' || true);
   // espera um pouco e verifica que não crashou
   await page.waitForTimeout(1500);
   check('ainda sem erros após onda', errors.length === 0, errors.slice(0,2).join('; '));
+
+  // 10a) Brief 07 A10 — budget perf: speed x4, FPS médio ~3s via rAF + zero erros (thresholds generosos p/ não flakar)
+  await page.evaluate(() => {
+    const sc = window.__game && window.__game.scene.getScene('Game');
+    if (sc && sc.speeds) { const i = sc.speeds.indexOf(4); if (i >= 0) sc.speedIdx = i; }
+  });
+  await page.waitForTimeout(300);
+  const fpsA10 = await page.evaluate(() => new Promise(res => {
+    let frames = 0;
+    const t0 = performance.now();
+    const tick = () => {
+      frames++;
+      if (performance.now() - t0 < 3000) requestAnimationFrame(tick);
+      else res(frames / ((performance.now() - t0) / 1000));
+    };
+    requestAnimationFrame(tick);
+  }));
+  // NOTA: headless usa rasterização por software (~14fps nesta máquina); threshold 10
+  // pega regressão grosseira (travamento/loop) sem flakar em máquina lenta.
+  check('perf: FPS médio > 10 em x4 por 3s', fpsA10 > 10, `fps=${Number(fpsA10).toFixed(1)}`);
+  check('perf: zero pageerror sob carga', errors.length === 0, errors.slice(0,2).join('; ').slice(0,300));
+  check('perf: zero console error sob carga', consoleErrs.length === 0, consoleErrs.join('; ').slice(0,300));
+
+  // 10b) Brief 06 VJS — checks simples dos itens novos
+  const vjsA11y = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('.shop-card')];
+    return { n: cards.length, ok: cards.every(c => c.getAttribute('role') === 'button' && c.tabIndex === 0) };
+  });
+  check('V1 shop-cards teclado (role=button+tabindex)', vjsA11y.n > 0 && vjsA11y.ok, JSON.stringify(vjsA11y));
+  const vjsStats = await page.locator('.shop-card .sc-stats').first().textContent().catch(() => '');
+  check('V2 stats inline DPS+alcance sem hover', /DPS|\/s|buff|DMG/i.test(vjsStats || ''), (vjsStats || '').slice(0,60));
+  const dmg0 = await page.evaluate(() => {
+    const sc = window.__game && window.__game.scene.getScene('Game');
+    return { v: sc && sc.S.showDmgNum, p: document.getElementById('btn-dmgnum').getAttribute('aria-pressed') };
+  });
+  await page.click('#btn-dmgnum');
+  await page.waitForTimeout(250);
+  const dmg1 = await page.evaluate(() => {
+    const sc = window.__game && window.__game.scene.getScene('Game');
+    return { v: sc && sc.S.showDmgNum, p: document.getElementById('btn-dmgnum').getAttribute('aria-pressed') };
+  });
+  check('V12 dmgnum toggle ON->OFF', dmg0.v === true && dmg1.v === false && dmg1.p === 'false', JSON.stringify({dmg0, dmg1}));
+  await page.click('#btn-dmgnum'); // restaura ON p/ não afetar o resto
+  await page.waitForTimeout(200);
 
   // Screenshots finais
   await page.screenshot({ path: 'v3-ultra-menu2.png' });
@@ -166,6 +234,170 @@ const path = require('path');
   await page.click('#btn-home', { timeout: 8000 });
   await page.waitForTimeout(800);
   check('voltou ao menu', await page.locator('#screen-menu:not(.hidden)').count() === 1);
+
+  // U-ASTRO — o astronauta solitário em todas as telas (só acrescenta, nunca afrouxa)
+  const uPixels = (id) => page.evaluate((cid) => {
+    const cv = document.getElementById(cid);
+    if (!cv) return -1;
+    try {
+      const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+      let n = 0;
+      for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+      return n;
+    } catch (e) { return -2; }
+  }, id);
+  check('U menu: astronauta na colina', await page.locator('#astro-menu').count() === 1);
+  check('U menu: astronauta visível', await page.locator('#astro-menu').isVisible());
+  const uMenuPx = await uPixels('astro-menu');
+  check('U menu: astronauta pintado', uMenuPx > 200, `px=${uMenuPx}`);
+  await page.screenshot({ path: 'u-menu.png' });
+  await page.click('#btn-lab');
+  await page.waitForTimeout(300);
+  check('U lab: faixa sunset', await page.locator('#modal-lab .uastro-strip').count() === 1);
+  await page.locator('#modal-lab .modal-close').click();
+  await page.click('#btn-codex');
+  await page.waitForTimeout(300);
+  check('U codex: faixa sunset', await page.locator('#modal-codex .uastro-strip').count() === 1);
+  await page.locator('#modal-codex .modal-close').click();
+  await page.click('#btn-ach');
+  await page.waitForTimeout(300);
+  check('U conquistas: faixa sunset', await page.locator('#modal-ach .uastro-strip').count() === 1);
+  await page.locator('#modal-ach .modal-close').click();
+  await page.waitForTimeout(200);
+  await page.click('#btn-start');
+  await page.waitForTimeout(1800);
+  // (2ª sessão: sem cliques em botões do HUD — listeners do DOM duplicam a cada create;
+  //  estados finais forçados via API do jogo, conforme contrato U-ASTRO)
+  await page.evaluate(() => {
+    const sc = window.__game && window.__game.scene.getScene('Game');
+    if (sc) window.DO.finalizeEnd(sc.S, 'victory');
+  });
+  await page.waitForTimeout(1500);
+  check('U vitória: astronauta em pé + lua', await page.locator('#end-astro[data-mood="victory"]').count() === 1);
+  check('U vitória: modal visível', await page.locator('#modal-end:not(.hidden)').count() === 1);
+  await page.screenshot({ path: 'u-victory.png' });
+  await page.evaluate(() => {
+    const sc = window.__game && window.__game.scene.getScene('Game');
+    if (sc) { sc.hideEndModal(); window.DO.finalizeEnd(sc.S, 'defeat'); }
+  });
+  await page.waitForTimeout(1500);
+  check('U derrota: astronauta sentado (solidão)', await page.locator('#end-astro[data-mood="defeat"]').count() === 1);
+  const uDiag = await page.locator('#end-diag').textContent().catch(() => '');
+  check('U derrota: diagnóstico mantido', (uDiag || '').trim().length > 0, (uDiag || '').slice(0, 60));
+  await page.screenshot({ path: 'u-defeat.png' });
+
+  // 11) Brief 09 M3 — mobile portrait 390x844 + landscape 844x390 (hasTouch, cliques reais)
+  async function mobileFlow(vw, vh, tag, shots) {
+    const ctx = await browser.newContext({ viewport: { width: vw, height: vh }, hasTouch: true, isMobile: true });
+    const mp = await ctx.newPage();
+    const merr = [];
+    const mcerr = [];
+    mp.on('console', m => { if (m.type() === 'error') mcerr.push(m.text()); });
+    mp.on('pageerror', e => merr.push('PAGEERROR: ' + e.message));
+    await mp.goto(file, { waitUntil: 'domcontentloaded' });
+    await mp.waitForTimeout(1500);
+    check(`[${tag}] menu visível`, await mp.locator('#screen-menu:not(.hidden)').count() === 1);
+    await mp.click('#btn-start');
+    await mp.waitForTimeout(1800);
+    check(`[${tag}] partida iniciou`, await mp.locator('#game-canvas canvas').count() >= 1);
+    if (shots.shop) await mp.screenshot({ path: shots.shop });
+    const toScreen = async (wx, wy) => {
+      const b = await mp.locator('#board-shell').boundingBox();
+      return { x: b.x + wx / 924 * b.width, y: b.y + wy / 572 * b.height };
+    };
+    const freeCell = () => mp.evaluate(() => {
+      const sc = window.__game && window.__game.scene.getScene('Game');
+      if (!sc) return null;
+      for (let c = 0; c < 21; c++) for (let r = 0; r < 13; r++) {
+        const k = c + ',' + r;
+        if (!sc.S.blocked[k] && !sc.S.occupied[k]) return { c, r };
+      }
+      return null;
+    });
+    const realTap = async (x, y) => {
+      try { await mp.touchscreen.tap(x, y); }
+      catch (e) { await mp.mouse.click(x, y); }
+    };
+    // comprar via clique real na shop + clique real no canvas
+    try { await mp.locator('.shop-card').first().tap({ timeout: 5000 }); }
+    catch (e) { await mp.locator('.shop-card').first().click({ timeout: 8000 }); }
+    await mp.waitForTimeout(250);
+    const cell = await freeCell();
+    check(`[${tag}] célula livre encontrada`, !!cell);
+    const pt = await toScreen(cell.c * 44 + 22, cell.r * 44 + 22);
+    await realTap(pt.x, pt.y);
+    await mp.waitForTimeout(600);
+    const afterBuy = await mp.evaluate(() => {
+      const sc = window.__game && window.__game.scene.getScene('Game');
+      return {
+        towers: sc ? sc.S.towers.length : -1,
+        open: !document.getElementById('tower-panel').classList.contains('hidden'),
+        shell: document.getElementById('board-shell').classList.contains('tower-panel-open'),
+        sel: !!(sc && sc.selected)
+      };
+    });
+    check(`[${tag}] torre comprada (1)`, afterBuy.towers === 1, JSON.stringify(afterBuy));
+    check(`[${tag}] painel fecha sozinho pós-compra (M1)`, afterBuy.open === false && afterBuy.shell === false, JSON.stringify(afterBuy));
+    // tocar na torre colocada -> abre compacto (exceção M1)
+    const tp = await mp.evaluate(() => {
+      const sc = window.__game.scene.getScene('Game');
+      const t = sc.S.towers[0]; return { x: t.x, y: t.y };
+    });
+    const tpPt = await toScreen(tp.x, tp.y);
+    await realTap(tpPt.x, tpPt.y);
+    await mp.waitForTimeout(500);
+    const afterTap = await mp.evaluate(() => ({
+      open: !document.getElementById('tower-panel').classList.contains('hidden'),
+      compact: document.getElementById('tower-panel').classList.contains('compact')
+    }));
+    check(`[${tag}] tocar torre abre painel compacto (M2)`, afterTap.open === true && afterTap.compact === true, JSON.stringify(afterTap));
+    if (shots.panel) await mp.screenshot({ path: shots.panel });
+    // geometria M2: botões >=44px, stats 1 coluna, supers visível sem overlap
+    const geo = await mp.evaluate(() => {
+      const panel = document.getElementById('tower-panel');
+      const pr = panel.getBoundingClientRect();
+      const sup = document.getElementById('supers').getBoundingClientRect();
+      const cs = getComputedStyle(document.getElementById('supers'));
+      const overlap = !(sup.right < pr.left || sup.left > pr.right || sup.bottom < pr.top || sup.top > pr.bottom);
+      return {
+        upH: Math.round(document.getElementById('tp-upgrade').getBoundingClientRect().height),
+        sellH: Math.round(document.getElementById('tp-sell').getBoundingClientRect().height),
+        cols: getComputedStyle(document.getElementById('tp-stats')).gridTemplateColumns,
+        supersVis: cs.visibility !== 'hidden' && parseFloat(cs.opacity) > 0.5,
+        overlap
+      };
+    });
+    check(`[${tag}] upgrade/vender >=44px`, geo.upH >= 44 && geo.sellH >= 44, JSON.stringify(geo));
+    check(`[${tag}] stats 1 coluna + supers visível sem overlap`, geo.cols.trim().split(' ').length === 1 && geo.supersVis && !geo.overlap, JSON.stringify(geo));
+    // upgrade funciona (créditos descontam)
+    const c0 = await mp.locator('#hud-credits').textContent();
+    try { await mp.locator('#tp-upgrade').tap({ timeout: 5000 }); }
+    catch (e) { await mp.locator('#tp-upgrade').click({ timeout: 8000 }); }
+    await mp.waitForTimeout(400);
+    const c1 = await mp.locator('#hud-credits').textContent();
+    const toNum = s => parseInt(String(s).replace(/[^0-9]/g, ''), 10);
+    check(`[${tag}] upgrade descontou créditos`, toNum(c1) < toNum(c0), `${c0} -> ${c1}`);
+    // tap-to-dismiss: toque fora (topbar) fecha o painel
+    const tb = await mp.locator('#topbar').boundingBox();
+    await realTap(tb.x + 10, tb.y + 10);
+    await mp.waitForTimeout(400);
+    check(`[${tag}] tap fora fecha painel`, await mp.locator('#tower-panel.hidden').count() === 1);
+    // iniciar onda pelo botão visível (desktop ou mobile) sem erros
+    await mp.locator('#btn-nextwave:visible, #btn-nextwave-mobile:visible').first().click();
+    await mp.waitForTimeout(1200);
+    const combat = await mp.evaluate(() => {
+      const sc = window.__game && window.__game.scene.getScene('Game');
+      return sc ? sc.S.state : '?';
+    });
+    check(`[${tag}] onda iniciada`, combat === 'combat' || combat === 'mutate', combat);
+    if (shots.combat) await mp.screenshot({ path: shots.combat });
+    await mp.waitForTimeout(1200);
+    check(`[${tag}] sem pageerror`, merr.length === 0, merr.join('; ').slice(0, 300));
+    check(`[${tag}] sem console error`, mcerr.length === 0, mcerr.join('; ').slice(0, 300));
+    await ctx.close();
+  }
+  await mobileFlow(390, 844, 'm-portrait', { shop: 'm-portrait-shop.png', panel: 'm-portrait-panel.png', combat: null });
+  await mobileFlow(844, 390, 'm-landscape', { shop: null, panel: null, combat: 'm-landscape-combat.png' });
 
   console.log(`\nRESULT: ${pass} PASS / ${fail} FAIL`);
   if(errors.length) console.log('ERRORS:', errors);

@@ -174,9 +174,10 @@ const droneG = mkEnemy(102, 'drone', 480, 286);
 const tankG = mkEnemy(103, 'tank', 440, 286);
 SA.enemies.push(runnerFly, droneG, tankG);
 const statsCannon = DO.getTowerStats(SA, cannon);
-check('cannon nv1 atinge voadores (naves vs naves)', statsCannon.canHitAir === true);
+// G-a G6 (design): cannon nv1 é balístico terrestre — NÃO atinge voadores (só specB Flak)
+check('cannon nv1 NÃO atinge voadores (splash/bullet terrestre)', statsCannon.canHitAir === false);
 const tCannon = DO.findBestTarget(SA, cannon, statsCannon);
-check('cannon nv1 mira o runner voador (FIRST) — agora acerta ar', tCannon === runnerFly,
+check('cannon nv1 mira o drone terrestre (FIRST) — ignora runner voador', tCannon === droneG,
   'alvo=' + (tCannon ? tCannon.type : 'null'));
 const laser = { tid: 2, defRef: D.TOWERS_DATA[2], level: 1, x: 462, y: 286, targetMode: 'FIRST',
   specBranch: null, cooldown: 0, recoil: 0, flash: 0, rampTime: 0, lastTargetEid: null, angle: 0, aimAngle: 0 };
@@ -186,8 +187,9 @@ check('laser mira o runner voador', DO.findBestTarget(SA, laser, statsLaser) ===
 cannon.targetMode = 'STRONGEST';
 check('modo STRONGEST escolhe maior HP (tank)', DO.findBestTarget(SA, cannon, statsCannon) === tankG);
 cannon.targetMode = 'FASTEST';
-check('modo FASTEST escolhe maior velocidade (runner 110 vs drone 62)',
-  DO.findBestTarget(SA, cannon, statsCannon) === runnerFly);
+// G-a G6 (design): cannon não mira ar — mais rápido EM TERRA é o drone (62 vs tank 32)
+check('modo FASTEST (cannon) escolhe maior velocidade terrestre (drone 62 vs tank 32)',
+  DO.findBestTarget(SA, cannon, statsCannon) === droneG);
 const flakCannon = Object.assign({}, cannon, { specBranch: 'B' });
 check('cannon com specB (Flak) libera anti-aéreo', DO.getTowerStats(SA, flakCannon).canHitAir === true);
 
@@ -258,7 +260,7 @@ const towersBefore = SM.towers.length;
 const merged = DO.mergeTowers(SM, mA);
 check('mergeTowers funde 3 → 1 torre nv11', !!merged && merged.level === 11);
 check('2 consumidas removidas sem reembolso', SM.towers.length === towersBefore - 2);
-check('custo em peças debitado (20⚙)', SM.parts === partsBefore - 20, 'parts=' + SM.parts);
+check('custo em peças debitado (' + D.MERGE_PARTS[1] + '⚙)', SM.parts === partsBefore - D.MERGE_PARTS[1], 'parts=' + SM.parts);
 check('sem candidatos/peças: merge falha', DO.canMerge(SM, merged) === false);
 
 // T7b.1: fusão direta compra apenas as cópias que faltam pelo valor integral do tier
@@ -267,21 +269,21 @@ SQ.credits = 99999; SQ.parts = 999;
 const qCell = nextFree(SQ); const qTower = DO.placeTower(SQ, qCell.c, qCell.r, 'cannon');
 qTower.level = 10;
 const q = DO.mergePurchaseQuote(SQ, qTower);
-check('fusão direta T1 calcula 2 cópias, $100 e 20⚙', q.missing === 2 && q.credits === 100 && q.parts === 20,
+check('fusão direta T1 calcula 2 cópias, $100 e ' + D.MERGE_PARTS[1] + '⚙', q.missing === 2 && q.credits === 100 && q.parts === D.MERGE_PARTS[1],
   `missing=${q.missing} credits=${q.credits} parts=${q.parts}`);
 const qCredits = SQ.credits, qParts = SQ.parts;
 check('fusão direta promove nv10 → nv11 sem ocupar novas casas',
   DO.mergeWithPurchase(SQ, qTower) === qTower && qTower.level === 11 && SQ.towers.length === 1);
-check('fusão direta debita exatamente cópias e peças', SQ.credits === qCredits - 100 && SQ.parts === qParts - 20);
+check('fusão direta debita exatamente cópias e peças', SQ.credits === qCredits - 100 && SQ.parts === qParts - D.MERGE_PARTS[1]);
 const SQ2 = DO.startNewGame(0, 'normal', false);
 SQ2.credits = 99999; SQ2.parts = 999;
 const q2aCell = nextFree(SQ2); const q2a = DO.placeTower(SQ2, q2aCell.c, q2aCell.r, 'cannon');
 const q2bCell = nextFree(SQ2); DO.placeTower(SQ2, q2bCell.c, q2bCell.r, 'cannon');
 q2a.level = 10;
 const q2 = DO.mergePurchaseQuote(SQ2, q2a);
-check('uma cópia existente reduz a compra direta para 1 nave', q2.missing === 1 && q2.credits === 50 && q2.parts === 20);
+check('uma cópia existente reduz a compra direta para 1 nave', q2.missing === 1 && q2.credits === 50 && q2.parts === D.MERGE_PARTS[1]);
 const t2Entry = DO.tierEntryPrice(D.TOWERS_DATA[0], 2);
-check('cópia T2 inclui construção, upgrades e fusão do tier anterior', t2Entry.credits > 150 && t2Entry.parts === 20);
+check('cópia T2 inclui construção, upgrades e fusão do tier anterior', t2Entry.credits > 150 && t2Entry.parts === D.MERGE_PARTS[1]);
 
 // T7c: fábrica produz peças e créditos no onWaveCleared
 const SF = DO.startNewGame(0, 'normal', false);
@@ -291,12 +293,11 @@ const fac = DO.placeTower(SF, fcell.c, fcell.r, 'factory');
 check('fábrica colocada (kind=factory)', !!fac && fac.defRef.kind === 'factory');
 const p0 = SF.parts, c0 = SF.credits;
 DO.onWaveCleared(SF);
-check('fábrica pagou +10⚙/+18cr e onda deu +2⚙', SF.parts === p0 + 12 && SF.credits > c0, `parts=${SF.parts} credits=${SF.credits - c0}`);
+check('fábrica pagou +20⚙/+18cr e onda deu +2⚙', SF.parts === p0 + D.FACTORY_DATA.partsPerWave(1) + 2 && SF.credits > c0, `parts=${SF.parts} credits=${SF.credits - c0}`);
 check('upgradeEnemyHP sobe nível e debita peças', (() => {
   SF.parts = 100; const lvl0 = SF.enemyHpLevel || 0;
   return DO.upgradeEnemyHP(SF) === true && SF.enemyHpLevel === lvl0 + 1 && SF.parts < 100;
 })());
-check('hpMultiplier reflete laboratório (+12%)', Math.abs(DO.hpMultiplier(SF) / (1 + SF.enemyHpLevel * D.HIVEMIND.hpAdd) - DO.hpMultiplier(SF) / (DO.hpMultiplier(SF))) < 1e9 ? true : true); // multiplicador aplicado
 const mulNow = DO.hpMultiplier(SF);
 SF.enemyHpLevel = (SF.enemyHpLevel || 0);
 const mulNoLab = (1 + SF.mapIdx * 0.25 + SF.wave * 0.12) * SF.diff.hpMul * SF.endlessHpMul;
@@ -408,6 +409,106 @@ check('partida volta ao estado pronto em modo infinito', SE.endless === true && 
 DO.startNextWave(SE);
 check('primeira onda extra continua após o final normal', SE.wave === SE.map.waves.length + 1 && SE.state === 'combat');
 D.Save.data = saveBeforeProgress;
+
+/* ---------- T10: operações atômicas e fusão sem atalhos ---------- */
+console.log('\n[T10] regressões de economia e fusão');
+function fundedGame() {
+  const state = DO.startNewGame(0, 'normal', false);
+  state.credits = 100000000; state.parts = 1000000;
+  return state;
+}
+function buildShip(state, id = 'cannon') {
+  const spot = nextFree(state);
+  return DO.placeTower(state, spot.c, spot.r, id);
+}
+function economy(state) {
+  return JSON.stringify({ credits: state.credits, parts: state.parts,
+    towers: state.towers.map(t => [t.tid, t.level, t.spent]),
+    occupied: Object.keys(state.occupied) });
+}
+const lowMerge = fundedGame();
+const lowMain = buildShip(lowMerge); buildShip(lowMerge); buildShip(lowMerge);
+const beforeLowMerge = economy(lowMerge);
+check('fusão manual rejeita nave abaixo do limite de tier',
+  !DO.canMerge(lowMerge, lowMain) && DO.mergeTowers(lowMerge, lowMain) === null && economy(lowMerge) === beforeLowMerge);
+const soldState = fundedGame();
+const soldShip = buildShip(soldState);
+DO.sellTower(soldState, soldShip);
+const replacement = DO.placeTower(soldState, soldShip.c, soldShip.r, 'laser');
+const afterSale = economy(soldState);
+check('venda repetida não gera dinheiro nem apaga a nave substituta',
+  DO.sellTower(soldState, soldShip) === false && economy(soldState) === afterSale && soldState.occupied[soldShip.c + ',' + soldShip.r] === replacement);
+check('upgrade não pode cobrar por uma nave vendida', DO.upgradeTower(soldState, soldShip) === false && economy(soldState) === afterSale);
+soldShip.level = 10;
+check('fusão direta rejeita referência de nave removida', DO.mergePurchaseQuote(soldState, soldShip) === null && DO.mergeWithPurchase(soldState, soldShip) === null && economy(soldState) === afterSale);
+const atomic = fundedGame();
+const atomicMain = buildShip(atomic); atomicMain.level = 10;
+const atomicPart = buildShip(atomic);
+atomic.credits = 49;
+let atomicBefore = economy(atomic);
+check('saldo insuficiente não cobra nem consome cópia existente', DO.mergeWithPurchase(atomic, atomicMain) === null && economy(atomic) === atomicBefore);
+atomic.credits = 1000; atomic.parts = D.MERGE_PARTS[1] - 1; atomicBefore = economy(atomic);
+check('peças insuficientes não cobram créditos nem consomem naves', DO.mergeWithPurchase(atomic, atomicMain) === null && economy(atomic) === atomicBefore);
+atomic.parts = D.MERGE_PARTS[1];
+const spentBeforeMerge = atomicMain.spent + atomicPart.spent + 50;
+DO.mergeWithPurchase(atomic, atomicMain);
+check('fusão preserva investimento das cópias existentes e compradas', atomicMain.spent === spentBeforeMerge && atomic.towers.length === 1);
+atomicMain.level = 50; atomicBefore = economy(atomic);
+check('nível máximo não oferece nem executa tier 6', DO.mergePurchaseQuote(atomic, atomicMain) === null && DO.mergeTowers(atomic, atomicMain) === null && economy(atomic) === atomicBefore);
+const savedAchievements = D.Save.data.achievements;
+D.Save.data.achievements = [];
+const achievementState = fundedGame(); const achievementShip = buildShip(achievementState);
+achievementShip.level = 10; DO.mergeWithPurchase(achievementState, achievementShip);
+check('primeira fusão não concede conquista de nível máximo', !D.Save.data.achievements.includes('max_tower'));
+achievementShip.level = 49; DO.upgradeTower(achievementState, achievementShip);
+check('nível 50 concede conquista de engenharia suprema', D.Save.data.achievements.includes('max_tower'));
+D.Save.data.achievements = savedAchievements;
+
+// Constrói de verdade as árvores de fusão para comparar o orçamento com o custo manual.
+function buildTier(state, tier, id) {
+  if (tier === 1) return buildShip(state, id);
+  const main = buildTier(state, tier - 1, id);
+  while (main.level < (tier - 1) * 10) {
+    if (!DO.upgradeTower(state, main)) throw new Error('Upgrade manual falhou');
+  }
+  buildTier(state, tier - 1, id); buildTier(state, tier - 1, id);
+  if (!DO.mergeTowers(state, main)) throw new Error('Fusão manual falhou');
+  return main;
+}
+for (const id of ['cannon', 'laser']) {
+  for (let tier = 1; tier <= 5; tier++) {
+    const state = fundedGame(); const initialCredits = state.credits, initialParts = state.parts;
+    const ship = buildTier(state, tier, id);
+    const price = DO.tierEntryPrice(ship.defRef, tier);
+    check(id + ' T' + tier + ': preço direto igual à construção manual completa',
+      initialCredits - state.credits === price.credits && initialParts - state.parts === price.parts && ship.spent === price.credits);
+  }
+}
+
+/* ---------- T11 (Brief 07 A4): eventos disparam SFX ---------- */
+console.log('\n[T11] Brief 07 — eventos disparam SFX (mock AudioSys)');
+const _SND = sandbox.window.AudioSys;
+const _keepExplosion = _SND.explosion, _keepMerge = _SND.merge, _keepWaveClear = _SND.waveClear;
+let _nExplosion = 0, _nMerge = 0, _nWaveClear = 0;
+_SND.explosion = function(){ _nExplosion++; };
+_SND.merge = function(){ _nMerge++; };
+_SND.waveClear = function(){ _nWaveClear++; };
+const SZ = DO.startNewGame(0, 'normal', false);
+DO.killEnemy(SZ, DO.spawnEnemy(SZ, 'drone'));
+check('killEnemy dispara explosion', _nExplosion >= 1, 'n=' + _nExplosion);
+const SY = DO.startNewGame(0, 'normal', false);
+SY.credits = 99999; SY.parts = 999;
+const _ya = nextFree(SY); const yA = DO.placeTower(SY, _ya.c, _ya.r, 'cannon');
+const _yb = nextFree(SY); const yB = DO.placeTower(SY, _yb.c, _yb.r, 'cannon');
+const _yc = nextFree(SY); const yC = DO.placeTower(SY, _yc.c, _yc.r, 'cannon');
+yA.level = 10; yB.level = 10; yC.level = 10;
+DO.mergeTowers(SY, yA);
+check('finishMerge dispara merge', _nMerge >= 1, 'n=' + _nMerge);
+const SW = DO.startNewGame(0, 'normal', true);
+SW.wave = 1;
+DO.onWaveCleared(SW);
+check('onWaveCleared dispara waveClear', _nWaveClear >= 1, 'n=' + _nWaveClear);
+_SND.explosion = _keepExplosion; _SND.merge = _keepMerge; _SND.waveClear = _keepWaveClear;
 
 /* ---------- resultado ---------- */
 console.log('\n==========================================');

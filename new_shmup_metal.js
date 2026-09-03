@@ -140,13 +140,21 @@
       this.playerBody.y = Phaser.Math.Clamp(this.playerBody.y + dy*300*dt, 80, BH-32);
       this.player.setPosition(this.playerBody.x, this.playerBody.y);
       this.playerShadow.setPosition(this.playerBody.x, this.playerBody.y+18);
-      // Spawn
+      // Spawn — +30% POR VEZ a cada 10 níveis (11-20 +30%, 21-30 +60%, etc)
       this.spawnTimer+=dt;
       const rate = 0.38 - this.stage.speed*0.05;
       if(this.spawnTimer>rate){
         this.spawnTimer=0;
+        // nível global estimado: stageIdx*5 + score/8 (cada 10 abates ~ +1 nível) ou direto do stage
+        const lvlEst = this.stageIdx*5 + Math.floor(this.score/6) + 1;
+        const mult = 1 + Math.floor(Math.max(0,lvlEst-1)/10)*0.30;
+        const extra = Math.floor(mult-1) + (Math.random() < (mult-1 - Math.floor(mult-1)) ? 1 : 0);
+        const baseExtraChance = 0.4 + (mult-1)*0.5; // 40% base + bônus por tier
         this.spawnEnemy();
-        if(Math.random()<0.4) this.spawnEnemy();
+        if(Math.random()<baseExtraChance) this.spawnEnemy();
+        for(let k=0;k<extra;k++) this.spawnEnemy();
+        // em tiers altos, spawna pares simultâneos extras
+        if(mult>=1.6 && Math.random()<0.5) { this.spawnEnemy(); this.spawnEnemy(); }
       }
       // Bullets player
       for(let i=this.bullets.length-1;i>=0;i--){

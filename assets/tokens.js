@@ -24,6 +24,13 @@
     orange: '#fb923c'
   };
 
+  // S1.1 — Paleta SUNSET (pôr-do-sol cinematográfico; PROIBIDO ROXO)
+  const SUNSET = {
+    ink: '#0d1220', skyDeep: '#1c2b4d', skyDusk: '#33456b',
+    cream: '#f6e7cb', moon: '#ffe9bd',
+    amber: '#f5a83d', ember: '#e0512b', flower: '#c93a2e'
+  };
+
   // Família por ID (silhueta manda, cor obedece — 1 detalhe)
   const FAMILY = {
     // torres — aço base + 1 acento
@@ -74,7 +81,7 @@
     LIGHT_FACTOR: 0.35
   };
 
-  const TOKENS = { PALETTE, FAMILY, TYPOGRAPHY, EFFECTS, PIXEL };
+  const TOKENS = { PALETTE, SUNSET, FAMILY, TYPOGRAPHY, EFFECTS, PIXEL };
 
   // helper tint (mesma lógica de pixelart.js mas centralizada)
   TOKENS.tint = function(hexStr, f){

@@ -5,6 +5,7 @@
     ctx: null, master: null, musicGain: null, sfxGain: null,
     muted: false, musicTimer: null, musicMode: 'menu', intensity: 0.35,
     _beams: {}, _noiseBuf: null, _step: 0, _unlocked: false,
+    lastPlay: {}, _voices: 0, _maxVoices: 12, _comp: null,
 
     ensure() {
       if (this.ctx) {
@@ -19,7 +20,13 @@
         this.ctx = new AC();
         this.master = this.ctx.createGain();
         this.master.gain.value = this.muted ? 0 : 0.55;
-        this.master.connect(this.ctx.destination);
+        try {
+          this._comp = this.ctx.createDynamicsCompressor();
+          this._comp.threshold.value = -18;
+          this._comp.ratio.value = 6;
+          this.master.connect(this._comp);
+          this._comp.connect(this.ctx.destination);
+        } catch (e) { this._comp = null; this.master.connect(this.ctx.destination); }
         this.sfxGain = this.ctx.createGain(); this.sfxGain.gain.value = 0.9; this.sfxGain.connect(this.master);
         this.musicGain = this.ctx.createGain(); this.musicGain.gain.value = 0.34; this.musicGain.connect(this.master);
         this._startMusic();
@@ -76,8 +83,34 @@
       return buf;
     },
 
+    _now() {
+      try {
+        if (typeof performance !== 'undefined' && performance.now) return performance.now();
+      } catch (e) {}
+      return Date.now();
+    },
+
+    _throttled(name, ms) {
+      const n = this._now();
+      const last = this.lastPlay[name] || 0;
+      if (n - last < ms) return true;
+      this.lastPlay[name] = n;
+      return false;
+    },
+
+    _tryAllocVoice() {
+      if (this._voices >= (this._maxVoices || 12)) return false;
+      this._voices++;
+      return true;
+    },
+
+    _releaseVoice() {
+      if (this._voices > 0) this._voices--;
+    },
+
     tone(freq, dur, type, vol, slideTo, when) {
       if (!this.ensure() || this.muted) return;
+      if (!this._tryAllocVoice()) return;
       const t = this.ctx.currentTime + (when || 0);
       const o = this.ctx.createOscillator();
       const g = this.ctx.createGain();
@@ -88,7 +121,11 @@
       g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol || 0.15), t + 0.008);
       g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
       o.connect(g); g.connect(this.sfxGain);
+      let _released = false;
+      const _rel = () => { if (_released) return; _released = true; this._releaseVoice(); };
+      try { o.onended = _rel; } catch (e) {}
       o.start(t); o.stop(t + dur + 0.05);
+      setTimeout(_rel, (dur || 0) * 1000 + ((when || 0) * 1000) + 250);
     },
 
     noiseHit(dur, vol, filterFreq, filterType, slideTo) {
@@ -109,6 +146,7 @@
 
     /* ---- SFX de tiro por tipo de torre ---- */
     shoot(kind, specBranch) {
+      if (this._throttled('shoot', 45)) return;
       switch (kind) {
         case 'bullet':
           if (specBranch === 'B') { this.tone(520, 0.05, 'square', 0.06, 240); }
@@ -146,6 +184,7 @@
     laserStopAll() { Object.keys(this._beams).forEach(k => this.laserStop(k)); },
 
     explosion(size) {
+      if (this._throttled('explosion', 80)) return;
       const s = size || 1;
       this.tone(110, 0.42 * s, 'sine', Math.min(0.5, 0.34 * s), 32);
       this.tone(48, 0.6 * s, 'sine', Math.min(0.45, 0.28 * s), 18);
@@ -153,6 +192,7 @@
       if(s>1.2){ this.noiseHit(0.35, 0.18, 4200, 'highpass'); this.tone(1800, 0.08, 'square', 0.08, 400); }
     },
     combo(n){
+      if (this._throttled('combo', 35)) return;
       const base = 440 + Math.min(24, n) * 28;
       this.tone(base, 0.14, 'sine', 0.11, base*1.35);
       if(n>=5) this.tone(base*1.5, 0.10, 'triangle', 0.07);
@@ -215,12 +255,14 @@
       this.musicTimer = setInterval(() => {
         if (!this.ctx || this.muted) return;
         if (this.ctx.state === 'suspended') return;
+        if (this.musicMode === 'paused' || this.musicMode === 'menu') return;
         this._step++;
         const inten = this.intensity;
         this._drones.forEach(d => { d.f.frequency.setTargetAtTime(180 + inten * 500, c.currentTime, 0.8); });
         const density = inten > 0.8 ? 1 : (inten > 0.55 ? 2 : 4);
         if (this._step % density !== 0) return;
         if (Math.random() > 0.35 + inten * 0.5) return;
+        if (!this._tryAllocVoice()) return;
         const idx = (Math.floor(Math.random() * 4) + [0, 2, 4, 1][this._step % 4]) % SCALE.length;
         const oct = Math.random() < 0.22 ? 2 : 1;
         const o = c.createOscillator(); o.type = 'triangle';
@@ -231,16 +273,31 @@
         g.gain.exponentialRampToValueAtTime(0.05 + inten * 0.05, t + 0.02);
         g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
         o.connect(this._arpFilter); o.connect(g); g.connect(this._arpFilter);
+        let _arpReleased = false;
+        const _arpRel = () => { if (_arpReleased) return; _arpReleased = true; this._releaseVoice(); };
+        try { o.onended = _arpRel; } catch (e) {}
         o.start(t); o.stop(t + 1);
+        setTimeout(_arpRel, 1250);
       }, 250);
     },
 
+    setMode(mode, wave, isBoss) {
+      const ok = ['menu', 'combat', 'boss', 'paused', 'victory', 'defeat'];
+      if (ok.indexOf(mode) === -1) return;
+      if (mode === 'boss') return this.musicTick('boss', wave, true);
+      return this.musicTick(mode, wave, isBoss);
+    },
+
     musicTick(mode, wave, isBoss) {
+      if (typeof mode === 'string' && mode) this.musicMode = mode;
+      if (isBoss) this.musicMode = 'boss';
       let inten = 0.35;
       if (mode === 'combat') inten = 0.5 + Math.min(0.35, (wave || 0) * 0.02);
       if (mode === 'menu') inten = 0.3;
-      if (isBoss) inten = 0.95;
+      if (mode === 'boss' || isBoss) inten = 0.95;
       if (mode === 'paused') inten = 0.15;
+      if (mode === 'victory') inten = 0.6;
+      if (mode === 'defeat') inten = 0.2; // Brief 07 A11: derrota acalma a trilha
       this.intensity = inten;
     }
   };

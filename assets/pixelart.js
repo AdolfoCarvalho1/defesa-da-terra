@@ -607,14 +607,117 @@
     }
   }
 
+  // ===== U-ASTRO: o astronauta solitário (perfil contemplativo, eco da referência) =====
+  // Paleta fechada sunset (sem roxo): traje M #8b95a8 / D #5a6d93, viseira V #ffe9bd
+  // com reflexo W, rim light âmbar R #f5a83d num dos lados, base/sombra S #0d1220.
+  // Assimétrico (perfil) → rows explícitas como ENEMY_ART (mirrorRows não se aplica).
+  function astroPalette() {
+    return {
+      K: '#000000',
+      M: '#8b95a8',
+      D: '#5a6d93',
+      V: '#ffe9bd',
+      W: '#ffffff',
+      R: '#f5a83d',
+      S: '#0d1220'
+    };
+  }
+  const ASTRO_ART = {
+    // astro_sit: SENTADO de perfil (olhando p/ direita), pernas encolhidas, mochila à esquerda.
+    astro_sit: [
+      '....KKKKKK......',
+      '...KMMMMMMMK....',
+      '..KMMMMMMMMMK...',
+      '..KMMMKVVVVVK...',
+      '.KDMMKVWWVVVVRK.',
+      '.KDMMKVWVVVVVRRK',
+      '.KDMMMKVVVVVVRRK',
+      '.KDMMMMKKKKKVRRK',
+      '.KDDMMMMMMMDDRRK',
+      '.KDDMMMDDMMDDRK.',
+      '..KDDMMMMMMDRK..',
+      '..KDDDMMMMDDRK..',
+      '...KKMMMDDRRK...',
+      '...SSSSSSSSSS...'
+    ],
+    // astro_stand: EM PÉ, viseira p/ cima (vitória).
+    astro_stand: [
+      '....KKKKKK......',
+      '...KMMMMMMMK....',
+      '...KMMVVVMMMK...',
+      '...KMVWVVVMMMK..',
+      '...KMVVVVVMMMRK.',
+      '....KMMMMMMMRK..',
+      '...KDMMMMMMDRK..',
+      '...KDMMMMMMDRK..',
+      '...KDMMMMMMDRK..',
+      '...KDMKMMKMDRK..',
+      '...KDKKMMKKDRK..',
+      '...KK.KMMK.KK...',
+      '......KMMK......',
+      '......KMMK......',
+      '.....SS..SS.....'
+    ]
+  };
+
+  // Pinta o astronauta num <canvas> 2D (DOM: menu, modais, pausa). Sem Phaser.
+  // opts: { scale, mound } — mound desenha a colina/horizonte sob os pés.
+  function paintOn(canvas, key, opts) {
+    opts = opts || {};
+    const scale = opts.scale || 4;
+    const rows = ASTRO_ART[key || 'astro_sit'] || ASTRO_ART.astro_sit;
+    const pal = astroPalette();
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return false;
+    let maxW = 0;
+    for (const r of rows) maxW = Math.max(maxW, r.length);
+    const w = maxW * scale, h = rows.length * scale;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const ox = Math.floor((canvas.width - w) / 2);
+    let oy = canvas.height - h;
+    if (opts.mound) {
+      // colina em silhueta #0d1220 + fio de horizonte âmbar
+      ctx.fillStyle = '#0d1220';
+      ctx.fillRect(0, canvas.height - 8 * scale / 4, canvas.width, 8 * scale / 4);
+      ctx.fillStyle = '#f5a83d';
+      ctx.fillRect(0, canvas.height - 8 * scale / 4, canvas.width, 1);
+      oy -= Math.floor(6 * scale / 4);
+    }
+    if (oy < 0) oy = 0;
+    for (let y = 0; y < rows.length; y++) {
+      const row = rows[y];
+      for (let x = 0; x < row.length; x++) {
+        const ch = row[x];
+        if (ch === ' ' || ch === '.') continue;
+        const c = pal[ch];
+        if (!c) continue;
+        ctx.fillStyle = c;
+        ctx.fillRect(ox + x * scale, oy + y * scale, scale, scale);
+      }
+    }
+    return true;
+  }
+
+  function buildAstro(scene) {
+    const pal = astroPalette();
+    for (const key in ASTRO_ART) {
+      if (scene.textures.exists(key)) continue;
+      const g = scene.make.graphics({ x: 0, y: 0, add: false });
+      const size = drawRows(g, ASTRO_ART[key], pal);
+      g.generateTexture(key, Math.max(16, size.w), Math.max(16, size.h));
+      g.destroy();
+    }
+  }
+
   function buildAll(scene) {
     try {
       buildTowerTextures(scene);
       buildEnemyTextures(scene);
       buildProjectiles(scene);
       buildFactory(scene);
+      buildAstro(scene);
     } catch (e) { console.error('[PXART]', e); }
   }
 
-  window.PXART = { build: buildAll, buildAll, PX, ENEMY_ART, TOWER_ART, PROJ_ART, enemyPalette, towerPalette, drawRows, tint };
+  window.PXART = { build: buildAll, buildAll, PX, ENEMY_ART, TOWER_ART, PROJ_ART, ASTRO_ART, astroPalette, paintOn, buildAstro, enemyPalette, towerPalette, drawRows, tint };
 })();

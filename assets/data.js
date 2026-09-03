@@ -706,7 +706,7 @@ var DO3 = (function () {
     { id: 'boss_slayer', name: 'Matador de Nave-Mãe', desc: 'Destrua um Dreadnought ou superior.', icon: '🎯' },
     { id: 'rich', name: 'Magnata Orbital', desc: 'Acumule 2000 créditos.', icon: '💰' },
     { id: 'map1_clear', name: 'Defensor de Alfa', desc: 'Complete o Setor 1.', icon: '⭐' },
-    { id: 'all_maps', name: 'Guardião da Periferia', desc: 'Complete todos os 5 setores.', icon: '👑' },
+    { id: 'all_maps', name: 'Guardião da Periferia', desc: 'Complete todos os 15 setores.', icon: '👑' },
     { id: 'endless_30', name: 'Sem Fim à Vista', desc: 'Sobreviva à onda 30 no Modo Infinito.', icon: '♾️' },
     { id: 'hard_win', name: 'Duro de Roer', desc: 'Vença qualquer setor em dificuldade VETERANO.', icon: '🔥' },
     { id: 'insane_win', name: 'Lenda do Vácuo', desc: 'Vença qualquer setor em dificuldade INSANE.', icon: '🌌' }
@@ -715,8 +715,9 @@ var DO3 = (function () {
   const AIR_KINDS = ['beam', 'chain', 'snipe', 'slow', 'dot', 'buff'];
 
   const SUPERS = {
-    ion:       { key: 'ion',       name: 'Canhão de Íons',        hot: 'Q', maxCd: 20, dmg: 520, radius: 88, color: '#38bdf8', targeted: true,  desc: 'Mira um ponto: feixe orbital colossal (520 dano puro + queimadura).' },
-    emp:       { key: 'emp',       name: 'Pulso PEM',             hot: 'W', maxCd: 26, color: '#60a5fa', desc: 'Pulso global: congela 5s, drena 70% escudos e atordoa.' },
+    // G9: íon com bônus vs boss; PEM restrito a raio (antes: global)
+    ion:       { key: 'ion',       name: 'Canhão de Íons',        hot: 'Q', maxCd: 20, dmg: 520, radius: 88, color: '#38bdf8', targeted: true,  desc: 'Mira um ponto: feixe orbital colossal (520 dano puro + queimadura; +100% vs chefe).' },
+    emp:       { key: 'emp',       name: 'Pulso PEM',             hot: 'W', maxCd: 26, radius: 180, color: '#60a5fa', targeted: true, desc: 'Mira um ponto: pulso PEM em raio 180 — congela 5s, drena 70% escudos e atordoa.' },
     vortex:    { key: 'vortex',    name: 'Vórtice Gravitacional', hot: 'E', maxCd: 30, radius: 110, dps: 42, dur: 6, color: '#22d3ee', targeted: true, desc: 'Buraco negro que suga e tritura por 6s (dano crescente).' },
     overdrive: { key: 'overdrive', name: 'Sobrecarga de Reator',  hot: 'R', maxCd: 36, dur: 9, rateMul: 2.2, color: '#fb923c', desc: '+120% cadência + projéteis em chamas por 9s.' }
   };
@@ -769,7 +770,7 @@ var DO3 = (function () {
   };
 
 // ===== v3 PIXEL: TIERS + MERGE + PADRÕES DE TIRO + SUPERS AUTOMÁTICOS + FÁBRICA + LÓGICA TÁTICA =====
-const MERGE_PARTS = { 1: 20, 2: 40, 3: 80, 4: 160 }; // peças ⚙ p/ fundir tier N → N+1
+const MERGE_PARTS = { 1: 12, 2: 24, 3: 48, 4: 96 }; // peças ⚙ p/ fundir tier N → N+1
 const TIER_NAMES = ['T1', 'T2', 'T3', 'T4', 'T5'];
 function getTier(level) { return Math.min(5, Math.floor(((level || 1) - 1) / 10) + 1); }
 const TIER_STATS = [
@@ -815,7 +816,7 @@ const FACTORY_DATA = {
   desc: 'Prédio industrial: produz PEÇAS ⚙ e créditos a cada onda completa.',
   upgradePartsCost: lvl => 15 * lvl,
   upgradeCreditCost: lvl => Math.round(90 * Math.pow(1.8, lvl)),
-  partsPerWave: lvl => 10 * lvl,
+  partsPerWave: lvl => 20 * lvl,
   creditsPerWave: lvl => 18 * lvl
 };
 // Laboratório Hivemind: paga peças p/ aumentar HP dos inimigos na run (mais ouro)
