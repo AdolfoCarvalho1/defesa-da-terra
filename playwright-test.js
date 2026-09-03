@@ -42,7 +42,7 @@ const path = require('path');
   await page.waitForTimeout(1800);
   check('topbar visível após start', await page.locator('#topbar.off').count() === 0);
   check('shopbar visível', await page.locator('#shopbar.off').count() === 0);
-  check('10 torres + fábrica na loja', await page.locator('.shop-card').count() === 11, 'found '+await page.locator('.shop-card').count());
+  check('10 torres + fábrica + estação + apoio na loja (F4)', await page.locator('.shop-card').count() === 13, 'found '+await page.locator('.shop-card').count());
   check('4 supers', await page.locator('.super-btn').count() === 4);
   check('canvas Phaser criado', await page.locator('#game-canvas canvas').count() >= 1);
 
@@ -97,6 +97,111 @@ const path = require('path');
   await page.click('#tp-target');
   await page.waitForTimeout(150);
   check('target cycle funcionou', (await page.locator('#tp-target').textContent()).includes('◇') || true);
+
+  // 7b) F5 frota: estação + apoio + recarga + stance + pip ARMA (só ADICIONA, não afrouxa)
+  // fecha painel (tower-panel-open intercepta cliques na loja) antes de clicar nos cards
+  await page.evaluate(()=>{
+    const sc = window.__game && window.__game.scene.getScene('Game');
+    if(sc){ sc.selected=null; if(sc.hideTowerPanel) sc.hideTowerPanel(); }
+    const p=document.getElementById('tower-panel'); if(p) p.classList.add('hidden');
+    const bs=document.getElementById('board-shell'); if(bs) bs.classList.remove('tower-panel-open');
+  });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => {
+    const sc = window.__game && window.__game.scene.getScene('Game');
+    if (sc) { sc.S.credits = 99999; sc.S.parts = 999; }
+  });
+  check('F5 loja tem card estação', await page.locator('.shop-card[data-id="station"]').count() === 1);
+  check('F5 loja tem card apoio', await page.locator('.shop-card[data-id="support"]').count() === 1);
+  await page.locator('.shop-card[data-id="station"]').click();
+  await page.waitForTimeout(200);
+  check('F5 estação selecionada (placing)', await page.locator('.shop-card[data-id="station"].sel').count() === 1);
+  const f5placed = await page.evaluate(() => {
+    const sc = window.__game.scene.getScene('Game');
+    const S = sc.S;
+    const free = [];
+    for (let c = 0; c < 21; c++) for (let r = 0; r < 13; r++) {
+      const k = c + ',' + r;
+      if (!S.blocked[k] && !S.occupied[k]) free.push({ c, r });
+    }
+    if (free.length < 3) return { n: S.towers.length };
+    const cannonCell = free[0];
+    let stationCell = null, supportCell = null;
+    for (const f of free) {
+      const d = Math.abs(f.c - cannonCell.c) + Math.abs(f.r - cannonCell.r);
+      if (d === 1 && !stationCell) stationCell = f;
+      else if (d === 1 && !supportCell) supportCell = f;
+    }
+    if (!stationCell) stationCell = free[1];
+    if (!supportCell) supportCell = free[2];
+    const t0 = S.towers.length;
+    window.DO.placeTower(S, stationCell.c, stationCell.r, 'station');
+    window.DO.placeTower(S, supportCell.c, supportCell.r, 'support');
+    sc.selected = null; if (sc.hideTowerPanel) sc.hideTowerPanel();
+    return { n: S.towers.length, t0, stationCell, supportCell, cannonIdx: 0 };
+  });
+  await page.waitForTimeout(400);
+  check('F5 estação + apoio posicionados', f5placed.n >= 3, JSON.stringify(f5placed));
+  const f5recharge = await page.evaluate(() => {
+    const sc = window.__game.scene.getScene('Game');
+    const S = sc.S;
+    const cannon = S.towers.find(t => t.defRef && t.defRef.id === 'cannon');
+    if (!cannon) return { ok: false, why: 'no-cannon' };
+    cannon.ammo = 2;
+    const before = cannon.ammo;
+    return { ok: true, before };
+  });
+  await page.waitForTimeout(2500);
+  const f5recharge2 = await page.evaluate(() => {
+    const sc = window.__game.scene.getScene('Game');
+    const cannon = sc.S.towers.find(t => t.defRef && t.defRef.id === 'cannon');
+    return { after: cannon ? cannon.ammo : -1 };
+  });
+  check('F5 torre no raio recarrega (ammo antes/depois)', f5recharge.ok && f5recharge2.after > f5recharge.before,
+    JSON.stringify({ ...f5recharge, ...f5recharge2 }));
+  await page.evaluate(() => {
+    const sc = window.__game.scene.getScene('Game');
+    const cannon = sc.S.towers.find(t => t.defRef && t.defRef.id === 'cannon');
+    sc.selected = cannon; sc.showTowerPanel(cannon);
+  });
+  await page.waitForTimeout(300);
+  check('F5 painel mostra ANCORADA', (await page.locator('#tp-stance').textContent()).includes('ANCORADA'));
+  await page.click('#tp-stance');
+  await page.waitForTimeout(300);
+  const f5stance = await page.evaluate(() => {
+    const sc = window.__game.scene.getScene('Game');
+    const cannon = sc.S.towers.find(t => t.defRef && t.defRef.id === 'cannon');
+    return { stance: cannon && cannon.stance, txt: document.getElementById('tp-stance').textContent };
+  });
+  check('F5 toggle postura -> PERSEGUIR', f5stance.stance === 'pursue' && f5stance.txt.includes('PERSEGUIR'), JSON.stringify(f5stance));
+  await page.click('#tp-stance');
+  await page.waitForTimeout(300);
+  const f5stance2 = await page.evaluate(() => {
+    const sc = window.__game.scene.getScene('Game');
+    const cannon = sc.S.towers.find(t => t.defRef && t.defRef.id === 'cannon');
+    return { stance: cannon && cannon.stance };
+  });
+  check('F5 toggle volta -> ANCORADA', f5stance2.stance === 'anchor', JSON.stringify(f5stance2));
+  const f5pip0 = await page.evaluate(() => {
+    const sc = window.__game.scene.getScene('Game');
+    sc.S.credits = 99999; sc.S.parts = 999;
+    const cannon = sc.S.towers.find(t => t.defRef && t.defRef.id === 'cannon');
+    sc.selected = cannon; sc.showTowerPanel(cannon);
+    return { credits: sc.S.credits, w: cannon.comp ? cannon.comp.w : 0 };
+  });
+  await page.waitForTimeout(300);
+  await page.click('#comp-w-buy');
+  await page.waitForTimeout(400);
+  const f5pip1 = await page.evaluate(() => {
+    const sc = window.__game.scene.getScene('Game');
+    const cannon = sc.S.towers.find(t => t.defRef && t.defRef.id === 'cannon');
+    const pips = document.querySelectorAll('#comp-w .comp-pips i.on').length;
+    return { credits: sc.S.credits, w: cannon.comp ? cannon.comp.w : -1, pips };
+  });
+  check('F5 comprar 1 pip ARMA desconta + pip acende', f5pip1.w === f5pip0.w + 1 && f5pip1.credits < f5pip0.credits && f5pip1.pips >= 1,
+    JSON.stringify({ before: f5pip0, after: f5pip1 }));
+  check('F5 sem pageerror após frota', errors.length === 0, errors.join('; ').slice(0, 300));
+  check('F5 sem console error após frota', consoleErrs.length === 0, consoleErrs.join('; ').slice(0, 300));
 
   // fecha painel — quando aberto, #board-shell.tower-panel-open esconde #supers (visibility:hidden)
   await page.evaluate(()=>{

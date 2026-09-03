@@ -63,7 +63,7 @@ button:focus-visible,.shop-card:focus-visible,.map-card:focus-visible,.mut-card:
 }
 ::selection{background:rgba(56,189,248,.32);color:#fff}
 
-#layout{display:grid;grid-template-rows:auto auto auto;gap:8px;justify-items:center;
+#layout{display:grid;grid-template-rows:auto auto auto;gap:8px;justify-items:center;container-type:inline-size;container-name:layout;
   width:min(97vw, calc((100vh - 150px) * 1.615));
   max-height:calc(100vh - 16px);position:relative;z-index:2}
 
@@ -233,10 +233,10 @@ button:focus-visible,.shop-card:focus-visible,.map-card:focus-visible,.mut-card:
   14%{opacity:1;transform:translate(-50%,0) scaleX(1) scaleY(1);filter:blur(0)}78%{opacity:1}100%{opacity:0;transform:translate(-50%,-6px) scale(.98)}}
 
 /* ---------- SHOP ULTRA ---------- */
-#shopbar{width:100%;max-width:100%;display:flex;gap:7px;overflow:hidden}
-.shop-card{--tc:var(--cyan);flex:1;display:flex;align-items:center;gap:10px;background:linear-gradient(160deg, rgba(16,26,48,.95), rgba(10,16,32,.98));
+#shopbar{width:100%;max-width:100%;display:flex;gap:7px;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}
+.shop-card{--tc:var(--cyan);flex:1 1 150px;min-width:150px;display:flex;align-items:center;gap:10px;background:linear-gradient(160deg, rgba(16,26,48,.95), rgba(10,16,32,.98));
   border:1px solid color-mix(in srgb,var(--tc) 18%, transparent);border-bottom:2px solid var(--tc);
-  padding:9px 10px;cursor:pointer;transition:all .15s ease;min-width:0;position:relative;overflow:hidden;
+  padding:9px 10px;cursor:pointer;transition:all .15s ease;position:relative;overflow:hidden;
   backdrop-filter:blur(10px);box-shadow:0 4px 12px rgba(0,0,0,.3)}
 .shop-card::before{content:'';position:absolute;inset:0;background:radial-gradient(300px 100px at 50% -20%, color-mix(in srgb,var(--tc) 14%, transparent), transparent 70%);opacity:0;transition:opacity .2s}
 .shop-card:hover{transform:translateY(-4px) scale(1.01);box-shadow:0 10px 24px rgba(0,0,0,.5), 0 0 20px color-mix(in srgb,var(--tc) 35%, transparent);border-color:color-mix(in srgb,var(--tc) 45%, transparent)}
@@ -571,11 +571,21 @@ html,body{
   cursor:pointer;
 }
 #btn-nextwave:disabled{opacity:.35;cursor:not-allowed}
-/* S4.2 — topbar sem corte em 1366px: encolhe stats/preview, nunca esconde nada */
-#topbar{flex-wrap:nowrap}
-#topbar>.hud-group:last-child{flex-shrink:0}
-#btn-hivemind{flex:0 1 auto;min-width:0}
-.wave-txt{min-width:0;flex:0 1 auto}
+/* S4.2 — topbar sem corte em telas largas; em telas médias empilha em linhas */
+@media(min-width:1151px){
+  #topbar{flex-wrap:nowrap}
+  #topbar>.hud-group:last-child{flex-shrink:0}
+  #btn-hivemind{flex:0 1 auto;min-width:0}
+  .wave-txt{min-width:0;flex:0 1 auto}
+}
+@container layout (max-width:1150px){
+  #topbar{flex-wrap:wrap}
+  #topbar .wave-mod{order:3;flex:1 1 100%;justify-content:flex-start;margin:0}
+  #topbar>.hud-group{flex:1 1 auto;min-width:0}
+  #topbar .hud-stat{flex:1 1 0;min-width:0}
+}
+/* chip de countdown vazio (sem AUTO) não ocupa espaço */
+#countdown-chip:empty{display:none}
 /* mobile compacto: textos e números menores, sem blocos informativos longos */
 @media (pointer:coarse),(max-width:760px){
   #tower-panel.compact #tp-name{font-size:11px}
@@ -899,6 +909,33 @@ html,body{
   .map-card:hover:not(.locked),.shop-card:hover{transform:none;box-shadow:0 4px 12px rgba(0,0,0,.3)}
   .map-card:active:not(.locked),.shop-card:active{filter:brightness(1.18);transform:scale(.98)}
 }
+/* ===== F1-HUD — barras de recurso + componentes + stance (só markup/CSS, sem JS) ===== */
+#res-bars{display:flex;flex-direction:column;gap:5px;margin:8px 0}
+.res{display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:8px}
+.res-lbl{font-family:'Orbitron';font-size:9px;font-weight:800;letter-spacing:.14em;color:var(--muted)}
+.res-track{height:6px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.08);overflow:hidden}
+.res-fill{height:100%;width:0%}
+#res-fuel-fill{background:#f5a83d;box-shadow:0 0 8px rgba(245,168,61,.6)}
+#res-batt-fill{background:#7dd3fc;box-shadow:0 0 8px rgba(125,211,252,.6)}
+#res-ammo-fill{background:#a3e635;box-shadow:0 0 8px rgba(163,230,53,.6)}
+.res-num{font-family:'JetBrains Mono';font-size:10px;font-weight:700;color:var(--muted);min-width:34px;text-align:right;font-variant-numeric:tabular-nums}
+#tp-stance{width:100%;margin-bottom:8px;font-size:11px;letter-spacing:.12em;background:rgba(56,189,248,.08);border-color:var(--cyan)}
+#comp-rows{display:flex;flex-direction:column;gap:5px;margin:8px 0}
+.comp-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:8px;padding:4px 6px;background:rgba(0,0,0,.18);border:1px solid rgba(56,189,248,.12)}
+.comp-name{font-family:'Orbitron';font-size:10px;font-weight:800;letter-spacing:.1em}
+.comp-pips{display:inline-flex;align-items:center;gap:3px;min-width:20px;min-height:8px}
+.comp-pips i{width:8px;height:8px;display:block;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1)}
+.comp-pips i.on{background:var(--gold);border-color:var(--gold);box-shadow:0 0 8px var(--gold)}
+.comp-buy{font-family:'JetBrains Mono';font-size:10px;font-weight:800;padding:6px 10px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);color:var(--gold)}
+.supply-ring{position:absolute;border:1px dashed rgba(245,168,61,.7);border-radius:50%;pointer-events:none;box-shadow:0 0 12px rgba(245,168,61,.25), inset 0 0 12px rgba(245,168,61,.12)}
+@media (pointer:coarse),(max-width:760px){
+  .res{padding:2px 0}
+  .res-track{height:8px}
+  .comp-row{padding:6px;gap:8px}
+  .comp-buy{min-height:44px;min-width:44px;padding:10px 14px;font-size:11px}
+  #tp-stance{min-height:44px;font-size:11px}
+  .res-num{font-size:11px}
+}
 </style>
 </head>
 <body>
@@ -988,10 +1025,22 @@ html,body{
         <button class="btn small chamf" id="tp-upgrade">MELHORAR</button>
         <button class="btn small chamf" id="tp-sell">VENDER</button>
       </div>
+      <div id="res-bars">
+        <div class="res" id="res-fuel"><span class="res-lbl">FUEL</span><div class="res-track"><div class="res-fill" id="res-fuel-fill"></div></div><span class="res-num" id="res-fuel-num"></span></div>
+        <div class="res" id="res-batt"><span class="res-lbl">BATT</span><div class="res-track"><div class="res-fill" id="res-batt-fill"></div></div><span class="res-num" id="res-batt-num"></span></div>
+        <div class="res" id="res-ammo"><span class="res-lbl">AMMO</span><div class="res-track"><div class="res-fill" id="res-ammo-fill"></div></div><span class="res-num" id="res-ammo-num"></span></div>
+      </div>
       <button class="btn small chamf hidden" id="tp-merge-buy">COMPLETAR FUSÃO</button>
       <details class="tp-sec" open><summary>STATUS</summary><div id="tp-stats"></div></details>
       <button class="ctrl-btn chamf" id="tp-target">◇ FIRST</button>
+      <button class="ctrl-btn chamf" id="tp-stance">⚓ ANCORADA</button>
       <details class="tp-sec" open><summary>ESPECIALIZAÇÃO</summary><div id="tp-specs"></div></details>
+      <div id="comp-rows">
+        <div class="comp-row" id="comp-w"><span class="comp-name">ARMA</span><span class="comp-pips"></span><button class="comp-buy" id="comp-w-buy">+$60</button></div>
+        <div class="comp-row" id="comp-e"><span class="comp-name">MOTOR</span><span class="comp-pips"></span><button class="comp-buy" id="comp-e-buy">+$60</button></div>
+        <div class="comp-row" id="comp-r"><span class="comp-name">REATOR</span><span class="comp-pips"></span><button class="comp-buy" id="comp-r-buy">+$60</button></div>
+        <div class="comp-row" id="comp-t"><span class="comp-name">MIRA</span><span class="comp-pips"></span><button class="comp-buy" id="comp-t-buy">+$60</button></div>
+      </div>
     </div>
 
     <div id="banner"></div>

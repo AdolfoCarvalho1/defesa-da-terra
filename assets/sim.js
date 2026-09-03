@@ -123,7 +123,7 @@
   function canHitAir(tower) {
     const def = tower.defRef || tower.def;
     if (!def) return false;
-    if (def.kind === 'factory') return false;
+    if (def.kind === 'factory' || def.kind === 'station' || def.kind === 'support') return false; // F2-sim: prédios não atiram
     if (def.kind === 'buff') return false; // amp é suporte, não atira
     // G-a G6: matriz anti-aérea por kind (base = D.AIR_KINDS sem buff).
     // beam/chain/snipe/slow/dot sempre atingem ar; bullet/splash/pierce só em casos especiais.
@@ -171,6 +171,10 @@
 
   function getTowerStats(S, t) {
     const def = t.defRef || t.def;
+    // F2-sim: prédios não têm stats de combate — retorna dummy sem quebrar
+    if (!def || isF2BuildingKind(def.kind)) {
+      return { dmg: 0, rng: 0, rate: 0, splash: 0, canHitAir: false, pierceBonus: 0, critBonus: 0, shieldBonus: 0, multiBonus: 0, stunBonus: 0, chainBonus: 0, dotDurMul: 1 };
+    }
     const lvl = t.level;
     // 50-level balanced scaling (linear + mild expo, não explode em 1.32^49)
     let dmg = def.dmg * (1 + (lvl - 1) * 0.22) * Math.pow(1.038, lvl - 1);
@@ -343,6 +347,26 @@
         else if (typeof _v === 'number' && _v > 0 && _v < 5) dmg *= 1.05;
       }
     }
+    // F4-comp C1: mults de componentes (COMP_DEFS) por cima do chassi nv1-50.
+    // w→dmg/rate, t→range/crit; e (move/leash) via getEngineMul no pursue; r (caps/take) via getMax*/getResupply.
+    try {
+      var _cp = (t && t.comp) || {};
+      var _cw = _cp.w | 0, _ct = _cp.t | 0;
+      if (_cw > 0 && D.COMP_DEFS && D.COMP_DEFS.w && D.COMP_DEFS.w.levels) {
+        var _wl = D.COMP_DEFS.w.levels[Math.min(_cw, D.COMP_DEFS.w.levels.length) - 1];
+        if (_wl) {
+          if (_wl.dmgMul) dmg *= _wl.dmgMul;
+          if (_wl.rateMul && rate) rate *= _wl.rateMul;
+        }
+      }
+      if (_ct > 0 && D.COMP_DEFS && D.COMP_DEFS.t && D.COMP_DEFS.t.levels) {
+        var _tlc = D.COMP_DEFS.t.levels[Math.min(_ct, D.COMP_DEFS.t.levels.length) - 1];
+        if (_tlc) {
+          if (_tlc.rngMul) rng *= _tlc.rngMul;
+          if (_tlc.critAdd) skillCrit += _tlc.critAdd;
+        }
+      }
+    } catch (_) {}
     return {
       dmg, rng, rate,
       splash: baseSplash,
@@ -365,6 +389,11 @@
   }
 
   function findBestTarget(S, tower, stats) {
+    // F2-sim E1/E2: estação/apoio/fábrica/buff nunca têm alvo (não atiram)
+    try {
+      var _td = tower && (tower.defRef || tower.def);
+      if (_td && (isF2BuildingKind(_td.kind) || _td.kind === 'buff')) return null;
+    } catch (_) {}
     let best = null;
     // G-a G6: reveal da amp B anula o stealth do phase para esta torre
     const revealed = towerHasReveal(S, tower);
@@ -546,8 +575,51 @@
       crit: isCritS, hitIds: {}, tower: t, src: t
     });
   }
-  function fireTower(S, t, target, stats) {
+  function fireTower(S, t, target, stats, dtArg) {
     const def = t.defRef || t.def;
+    // F2-sim R1: prédios/suporte/buff nunca atiram
+    if (!def || isF2BuildingKind(def.kind) || def.kind === 'buff') return false;
+    // F2-sim R1: consumo antes do tiro — munição (ammoPerShot) + bateria p/ beam/chain/slow/dot (battDrain*dt)
+    // sem ammo → não atira (aviso 1×/s); sem batt → energy kinds não disparam; bullet sem batt AINDA dispara se houver ammo
+    var ammoPerShot = (def.ammoPerShot != null ? def.ammoPerShot : 0);
+    var ammoCost = 0, battCost = 0;
+    var isEnergy = !!F2_ENERGY[def.kind];
+    if (ammoPerShot > 0) {
+      if (def.kind === 'bullet') {
+        var tier0 = (D.getTier ? D.getTier(t.level || 1) : 1);
+        var isFlak0 = t.specBranch === 'B' && def.specB && def.specB.multi;
+        var pat0 = (D.SHOT_PATTERNS && D.SHOT_PATTERNS[def.id]) || null;
+        var count0 = isFlak0 ? def.specB.multi : 1;
+        if (stats && stats.multiBonus) count0 += stats.multiBonus;
+        try {
+          if (pat0 && !isFlak0 && def.id === 'cannon') count0 = Math.max(count0, (pat0.multi && pat0.multi[tier0 - 1]) || count0);
+          if (pat0 && !isFlak0 && def.id === 'gatling') count0 = Math.max(count0, (pat0.burst && pat0.burst[tier0 - 1]) || count0);
+        } catch (_) {}
+        ammoCost = ammoPerShot * Math.max(1, count0);
+      } else if (def.kind === 'splash') {
+        var tierS = (D.getTier ? D.getTier(t.level || 1) : 1);
+        var specS = t.specBranch === 'A' ? def.specA : (t.specBranch === 'B' ? def.specB : null);
+        var patS = D.SHOT_PATTERNS && D.SHOT_PATTERNS.missile;
+        var salvoS = 1;
+        try { salvoS = Math.max((specS && specS.salvos) || 0, (patS && patS.salvo && patS.salvo[tierS - 1]) || 1); } catch (_) { salvoS = 1; }
+        ammoCost = ammoPerShot * Math.max(1, salvoS);
+      } else {
+        ammoCost = ammoPerShot;
+      }
+    }
+    if (isEnergy) {
+      var drain = (def.battDrain != null ? def.battDrain : 0);
+      var dtEff = (typeof dtArg === 'number' && dtArg > 0) ? dtArg : 0;
+      if (!(dtEff > 0)) {
+        var rEff = (stats && stats.rate) || 0;
+        dtEff = rEff > 0 ? 1 / rEff : 1;
+      }
+      battCost = drain * dtEff;
+    }
+    if (ammoCost > 0 && t.ammo != null && t.ammo < ammoCost) { f2Warn(S, t, 'ammo'); return false; }
+    if (battCost > 0 && t.batt != null && t.batt < battCost) { f2Warn(S, t, 'batt'); return false; }
+    if (ammoCost > 0 && t.ammo != null) t.ammo = Math.max(0, t.ammo - ammoCost);
+    if (battCost > 0 && t.batt != null) t.batt = Math.max(0, t.batt - battCost);
     t.aimAngle = Math.atan2(target.y - t.y, target.x - t.x);
     t.recoil = 1.0;
     t.flash = 0.08;
@@ -702,6 +774,7 @@
       }
       ev(S, { t: 'shake', mag: 3 + tier });
     }
+    return true;
   }
 
   /* ---- Supers orbitais ---- */
@@ -896,8 +969,182 @@
     return true;
   }
 
+  /* ---- F2-sim: recursos (fuel/batt/ammo), reator, suprimento ---- */
+  var F2_ENERGY = { beam: 1, chain: 1, slow: 1, dot: 1 };
+  function isF2BuildingKind(k) { return k === 'factory' || k === 'station' || k === 'support'; }
+  function getReactorCapMul(t) {
+    try {
+      var r = (t && t.comp && t.comp.r) || 0;
+      if (!r) return 1;
+      var lvls = D.COMP_DEFS && D.COMP_DEFS.r && D.COMP_DEFS.r.levels;
+      if (!lvls) return 1;
+      var idx = Math.min(r, lvls.length) - 1;
+      var e = lvls[idx];
+      return (e && e.capMul) || 1;
+    } catch (_) { return 1; }
+  }
+  function getReactorTakeMul(t) {
+    try {
+      var r = (t && t.comp && t.comp.r) || 0;
+      if (!r) return 1;
+      var lvls = D.COMP_DEFS && D.COMP_DEFS.r && D.COMP_DEFS.r.levels;
+      if (!lvls) return 1;
+      var idx = Math.min(r, lvls.length) - 1;
+      var e = lvls[idx];
+      return (e && e.takeMul) || 1;
+    } catch (_) { return 1; }
+  }
+  function getMaxFuel(t) {
+    var def = (t && (t.defRef || t.def)) || {};
+    var base = (def.fuelCap != null ? def.fuelCap : (t.maxFuel != null ? t.maxFuel : 100));
+    return base * getReactorCapMul(t);
+  }
+  function getMaxBatt(t) {
+    var def = (t && (t.defRef || t.def)) || {};
+    var base = (def.battCap != null ? def.battCap : (t.maxBatt != null ? t.maxBatt : 100));
+    return base * getReactorCapMul(t);
+  }
+  function getMaxAmmo(t) {
+    var def = (t && (t.defRef || t.def)) || {};
+    var base = (def.ammoCap != null ? def.ammoCap : (t.maxAmmo != null ? t.maxAmmo : 40));
+    return base * getReactorCapMul(t);
+  }
+  function initF2TowerState(t, c, r, def) {
+    var d = def || (t && (t.defRef || t.def)) || {};
+    t.fuel = (d.fuelCap != null ? d.fuelCap : 100);
+    t.maxFuel = t.fuel;
+    t.batt = (d.battCap != null ? d.battCap : 100);
+    t.maxBatt = t.batt;
+    t.ammo = (d.ammoCap != null ? d.ammoCap : 40);
+    t.maxAmmo = t.ammo;
+    t.comp = { w: 0, e: 0, r: 0, t: 0 };
+    t.stance = 'anchor';
+    t.ax = c; t.ay = r;
+    t.returning = false; // F3-pursue: flag p/ UI (lógica de retorno)
+    t._noTargetT = 0; // F3-pursue: segundos sem alvo
+    t._pursueAcc = 0; // F3-pursue: acumulador p/ passo (base 1 célula/s × moveMul)
+    t._warnCd = 0;
+    if (t.moveCd == null) t.moveCd = 0;
+    return t;
+  }
+  function getFactoryBoost(S) {
+    var sum = 0;
+    try {
+      if (S && S.towers) {
+        for (var i = 0; i < S.towers.length; i++) {
+          var o = S.towers[i];
+          var od = o.defRef || o.def;
+          if (od && od.kind === 'factory' && D.FACTORY_DATA && D.FACTORY_DATA.fuelBoost) {
+            sum += D.FACTORY_DATA.fuelBoost(o.level || 1);
+          }
+        }
+      }
+    } catch (_) {}
+    return sum;
+  }
+  function getResupply(S, t) {
+    var out = { fuel: 0, batt: 0, ammo: 0 };
+    try {
+      if (!S || !t) return out;
+      var fuels = [], batts = [], ammos = [];
+      var tx = t.x, ty = t.y;
+      for (var i = 0; i < S.towers.length; i++) {
+        var o = S.towers[i];
+        if (o === t) continue;
+        var od = o.defRef || o.def;
+        if (!od) continue;
+        if (od.kind !== 'station' && od.kind !== 'support') continue; // factory NÃO é fonte
+        var rad = od.supplyRadius;
+        if (rad == null) {
+          if (od.id === 'station' && D.STATION_DATA) rad = D.STATION_DATA.supplyRadius;
+          else if (od.id === 'support' && D.SUPPORT_DATA) rad = D.SUPPORT_DATA.supplyRadius;
+          else rad = 0;
+        }
+        var dx = (o.x != null ? o.x : 0) - (tx != null ? tx : 0);
+        var dy = (o.y != null ? o.y : 0) - (ty != null ? ty : 0);
+        if (Math.hypot(dx, dy) > rad) continue;
+        var rates = od.rates;
+        if (!rates) {
+          if (od.id === 'station' && D.STATION_DATA) rates = D.STATION_DATA.rates;
+          else if (od.id === 'support' && D.SUPPORT_DATA) rates = D.SUPPORT_DATA.rates;
+        }
+        if (!rates) continue;
+        if (rates.fuel) fuels.push(rates.fuel);
+        if (rates.batt) batts.push(rates.batt);
+        if (rates.ammo) ammos.push(rates.ammo);
+      }
+      var dim = function (arr) {
+        if (!arr.length) return 0;
+        var s = arr.slice().sort(function (a, b) { return b - a; });
+        var rest = 0;
+        for (var k = 1; k < s.length; k++) rest += s[k];
+        return s[0] + 0.5 * rest;
+      };
+      var boost = 1 + getFactoryBoost(S);
+      var take = getReactorTakeMul(t);
+      out.fuel = dim(fuels) * boost * take;
+      out.batt = dim(batts) * boost * take;
+      out.ammo = dim(ammos) * boost * take;
+    } catch (_) {}
+    return out;
+  }
+  function f2Warn(S, t, res) {
+    if ((t._warnCd || 0) > 0) return;
+    t._warnCd = 1.0;
+    var txt = res === 'ammo' ? 'SEM MUNIÇÃO' : (res === 'batt' ? 'SEM BATERIA' : 'SEM COMBUSTÍVEL');
+    ev(S, { t: 'resEmpty', res: res, tid: t.tid, x: t.x, y: t.y });
+    ev(S, { t: 'float', x: t.x, y: t.y - 16, txt: txt, col: '#f43f5e', size: 10 });
+  }
+
+  /* ---- F3-pursue: posturas anchor/pursue + leash da âncora ---- */
+  // Motor (COMP_DEFS.e): moveMul = velocidade (base 1 célula/s); leashMul = alcance da âncora
+  function getEngineMul(t) {
+    try {
+      var e = (t && t.comp && t.comp.e) || 0;
+      if (!e) return { moveMul: 1, leashMul: 1 };
+      var lvls = D.COMP_DEFS && D.COMP_DEFS.e && D.COMP_DEFS.e.levels;
+      if (!lvls) return { moveMul: 1, leashMul: 1 };
+      var lv = lvls[Math.min(e, lvls.length) - 1];
+      return { moveMul: (lv && lv.moveMul) || 1, leashMul: (lv && lv.leashMul) || 1 };
+    } catch (_) { return { moveMul: 1, leashMul: 1 }; }
+  }
+  function pursueAnchorXY(t) {
+    var ax = (t.ax != null ? t.ax : t.c), ay = (t.ay != null ? t.ay : t.r);
+    return { ax: ax, ay: ay, x: ax * CELL + CELL / 2, y: ay * CELL + CELL / 2 };
+  }
+  // F3: passo de perseguição/retorno p/ célula vizinha — cobra fuelPerCell (Manhattan);
+  // sem fuel ou célula ocupada/bloqueada → false (para onde está, atira normalmente)
+  function tryPursueStep(S, t, nc, nr) {
+    if (!S || !t) return false;
+    if (nc < 0 || nc >= COLS || nr < 0 || nr >= ROWS) return false;
+    var key = nc + ',' + nr;
+    if (S.blocked[key] || S.occupied[key]) return false;
+    var def = t.defRef || t.def;
+    var fuelPerCell = (def && def.fuelPerCell != null ? def.fuelPerCell : 2);
+    var cost = fuelPerCell * (Math.abs(nc - t.c) + Math.abs(nr - t.r));
+    if (t.fuel != null && t.fuel < cost) return false;
+    if (t.fuel != null) t.fuel = Math.max(0, t.fuel - cost);
+    delete S.occupied[t.c + ',' + t.r];
+    t.c = nc; t.r = nr;
+    t.x = nc * CELL + CELL / 2; t.y = nr * CELL + CELL / 2;
+    return true;
+  }
+  // F3: DO.setStance(S,t,stance) — valida torre viva + stance anchor|pursue
+  function setStance(S, t, stance) {
+    if (!S || !t) return false;
+    if (stance !== 'anchor' && stance !== 'pursue') return false;
+    if (!isLiveTower(S, t)) return false;
+    t.stance = stance;
+    t._noTargetT = 0;
+    t._pursueAcc = 0;
+    t.returning = false;
+    return true;
+  }
+
   function placeTower(S, c, r, towerId) {
     if (towerId === 'factory') return placeFactory(S, c, r); // v3 PIXEL FASE 5
+    if (towerId === 'station') return placeStation(S, c, r); // F2-sim E1
+    if (towerId === 'support') return placeSupport(S, c, r); // F2-sim E2
     const def = D.TOWERS_DATA.find(t => t.id === towerId);
     if (!def) return null;
     const key = c + ',' + r;
@@ -913,6 +1160,7 @@
       cooldown: 0, recoil: 0, flash: 0, rampTime: 0, lastTargetEid: null,
       targetMode: 'FIRST', specBranch: null, beamTarget: null
     };
+    initF2TowerState(t, c, r, def); // F2-sim R1: fuel/batt/ammo cheios + comp/stance/ax/ay
     S.towers.push(t);
     S.occupied[key] = t;
     SND.build();
@@ -930,7 +1178,7 @@
     return true;
   }
   function upgradeTower(S, t) {
-    if (!isLiveTower(S, t) || t.level >= D.TOWER_MAX_LVL || t.defRef.kind === 'factory') { SND.error(); return false; }
+    if (!isLiveTower(S, t) || t.level >= D.TOWER_MAX_LVL || isF2BuildingKind(t.defRef.kind)) { SND.error(); return false; }
     // v3 PIXEL FASE 2: upgrade trava no teto do tier — precisa FUNDIR
     if (t.level >= tierCap(t)) {
       SND.error();
@@ -945,6 +1193,30 @@
     SND.upgrade();
     ev(S, { t: 'lvlFx', x: t.x, y: t.y, col: t.defRef.color });
     if (t.level >= D.TOWER_MAX_LVL) unlockAchievement('max_tower');
+    return true;
+  }
+
+  /* ---- F4-comp C1: compra de pips de componente (atômica, sem débito parcial) ---- */
+  // DO.buyComp(S,t,track): track em w|e|r|t; custo do próximo pip em COMP_DEFS.levels[cur]
+  // (créditos + peças); debita, comp[track]++, t.spent+=créditos. Erro via SND como upgradeTower.
+  function buyComp(S, t, track) {
+    if (!S || !t) { SND.error(); return false; }
+    if (track !== 'w' && track !== 'e' && track !== 'r' && track !== 't') { SND.error(); return false; }
+    if (!isLiveTower(S, t)) { SND.error(); return false; }
+    if (!t.comp) t.comp = { w: 0, e: 0, r: 0, t: 0 };
+    var cur = t.comp[track] | 0;
+    if (cur >= 5) { SND.error(); return false; }
+    var cdef = D.COMP_DEFS && D.COMP_DEFS[track];
+    if (!cdef || !cdef.levels || !cdef.levels[cur]) { SND.error(); return false; }
+    var lv = cdef.levels[cur];
+    var cc = lv.credits || 0, pc = lv.parts || 0;
+    if ((S.credits || 0) < cc || (S.parts || 0) < pc) { SND.error(); return false; }
+    S.credits -= cc;
+    if (pc) S.parts -= pc;
+    t.comp[track] = cur + 1;
+    t.spent = (t.spent || 0) + cc;
+    SND.upgrade();
+    ev(S, { t: 'lvlFx', x: t.x, y: t.y, col: '#fbbf24' });
     return true;
   }
 
@@ -981,15 +1253,15 @@
   function tierCap(t) { return Math.min(5, D.getTier(t.level)) * 10; }
   function mergeCandidates(S, t) {
     const tier = D.getTier(t.level);
-    return S.towers.filter(o => o !== t && o.defRef.kind !== 'factory' && (o.defRef.id === t.defRef.id) && D.getTier(o.level) === tier);
+    return S.towers.filter(o => o !== t && !isF2BuildingKind(o.defRef.kind) && (o.defRef.id === t.defRef.id) && D.getTier(o.level) === tier);
   }
   function canMerge(S, t) {
-    if (!isLiveTower(S, t) || t.defRef.kind === 'factory' || t.level >= D.TOWER_MAX_LVL) return false;
+    if (!isLiveTower(S, t) || isF2BuildingKind(t.defRef.kind) || t.level >= D.TOWER_MAX_LVL) return false;
     if (t.level < tierCap(t)) return false; // só funde no teto do tier
     return mergeCandidates(S, t).length >= 2;
   }
   function tierEntryPrice(def, tier) {
-    if (!def || def.kind === 'factory') return { credits: 0, parts: 0 };
+    if (!def || isF2BuildingKind(def.kind)) return { credits: 0, parts: 0 };
     const targetTier = Math.max(1, Math.min(5, tier || 1));
     let credits = def.cost;
     let parts = 0;
@@ -1006,7 +1278,7 @@
     return { credits, parts };
   }
   function mergePurchaseQuote(S, t) {
-    if (!isLiveTower(S, t) || t.defRef.kind === 'factory' || t.level >= D.TOWER_MAX_LVL || t.level < tierCap(t)) return null;
+    if (!isLiveTower(S, t) || isF2BuildingKind(t.defRef.kind) || t.level >= D.TOWER_MAX_LVL || t.level < tierCap(t)) return null;
     const tier = D.getTier(t.level);
     const existing = Math.min(2, mergeCandidates(S, t).length);
     const missing = 2 - existing;
@@ -1094,11 +1366,59 @@
       cooldown: 0, recoil: 0, flash: 0, rampTime: 0, lastTargetEid: null,
       targetMode: 'FIRST', specBranch: null, beamTarget: null
     };
+    initF2TowerState(t, c, r, { fuelCap: 100, battCap: 100, ammoCap: 0 }); // F2-sim: prédio também carrega estado
     S.towers.push(t);
     S.occupied[key] = t;
     SND.build();
     if (SND.factory) SND.factory(); // Brief 07 A1: martelo industrial ao colocar fábrica
     ev(S, { t: 'buildFx', x: t.x, y: t.y, col: fd.color });
+    return t;
+  }
+  /* ---- F2-sim E1/E2: estação/apoio como factory (prédio sem tiro/level) ---- */
+  function placeStation(S, c, r) {
+    const sd = D.STATION_DATA;
+    if (!sd) return null;
+    const key = c + ',' + r;
+    if (S.occupied[key] || S.blocked[key]) { SND.error(); return null; }
+    if (c < 0 || c >= COLS || r >= ROWS || r < 0) return null;
+    if (S.credits < sd.cost) { SND.error(); return null; }
+    S.credits -= sd.cost;
+    const t = {
+      tid: uid(), defRef: sd, c, r,
+      x: c * CELL + CELL / 2, y: r * CELL + CELL / 2,
+      level: 1, spent: sd.cost, kills: 0, damageDealt: 0,
+      angle: -Math.PI / 2, aimAngle: -Math.PI / 2,
+      cooldown: 0, recoil: 0, flash: 0, rampTime: 0, lastTargetEid: null,
+      targetMode: 'FIRST', specBranch: null, beamTarget: null
+    };
+    initF2TowerState(t, c, r, { fuelCap: 100, battCap: 100, ammoCap: 0 });
+    S.towers.push(t);
+    S.occupied[key] = t;
+    SND.build();
+    ev(S, { t: 'buildFx', x: t.x, y: t.y, col: sd.color });
+    return t;
+  }
+  function placeSupport(S, c, r) {
+    const sd = D.SUPPORT_DATA;
+    if (!sd) return null;
+    const key = c + ',' + r;
+    if (S.occupied[key] || S.blocked[key]) { SND.error(); return null; }
+    if (c < 0 || c >= COLS || r >= ROWS || r < 0) return null;
+    if (S.credits < sd.cost) { SND.error(); return null; }
+    S.credits -= sd.cost;
+    const t = {
+      tid: uid(), defRef: sd, c, r,
+      x: c * CELL + CELL / 2, y: r * CELL + CELL / 2,
+      level: 1, spent: sd.cost, kills: 0, damageDealt: 0,
+      angle: -Math.PI / 2, aimAngle: -Math.PI / 2,
+      cooldown: 0, recoil: 0, flash: 0, rampTime: 0, lastTargetEid: null,
+      targetMode: 'FIRST', specBranch: null, beamTarget: null
+    };
+    initF2TowerState(t, c, r, { fuelCap: 100, battCap: 100, ammoCap: 0 });
+    S.towers.push(t);
+    S.occupied[key] = t;
+    SND.build();
+    ev(S, { t: 'buildFx', x: t.x, y: t.y, col: sd.color });
     return t;
   }
   function upgradeFactory(S, t) {
@@ -1454,12 +1774,92 @@
       const def = t.defRef || t.def;
       if (t.flash > 0) t.flash -= dt;
       if (t.recoil > 0) t.recoil = Math.max(0, t.recoil - dt * 6);
+      if ((t._warnCd || 0) > 0) t._warnCd = Math.max(0, t._warnCd - dt); // F2-sim: throttle do aviso 1×/s
+      // F2-sim R2/E3: recarga por segundo (station/support → torres), clamp nos maxs efetivos (reator)
+      if (t.fuel != null || t.batt != null || t.ammo != null) {
+        try {
+          var rs = getResupply(S, t);
+          if (rs.fuel > 0 && t.fuel != null) t.fuel = Math.min(getMaxFuel(t), t.fuel + rs.fuel * dt);
+          if (rs.batt > 0 && t.batt != null) t.batt = Math.min(getMaxBatt(t), t.batt + rs.batt * dt);
+          if (rs.ammo > 0 && t.ammo != null) t.ammo = Math.min(getMaxAmmo(t), t.ammo + rs.ammo * dt);
+        } catch (_) {}
+      }
 
       // G2: fila de supers automáticos — dispara sozinho quando cheio (incl. amp/buff)
       if (D.SUPERS_AUTO[def.id]) fireAutoSuperIfReady(S, t);
-      // v3 PIXEL FASE 5: fábrica não combate — pula alvo/tiro/buff
-      if (def.kind === 'factory') continue;
+      // v3 PIXEL FASE 5: fábrica não combate — pula alvo/tiro/buff (F2-sim: station/support também)
+      if (isF2BuildingKind(def.kind)) continue;
       const stats = getTowerStats(S, t);
+      // F3-pursue: postura pursue move 1 célula/intervalo (base 1 célula/s × moveMul do Motor)
+      // até o leash (1.5×alcance×leashMul da ÂNCORA); fuel<20% fora da âncora ou 3s sem alvo → retorna
+      if ((t.stance || 'anchor') === 'pursue' && def.kind !== 'buff' && S.state !== 'victory' && S.state !== 'defeat') {
+        var _eng = getEngineMul(t);
+        var _anch = pursueAnchorXY(t);
+        var _atAnchor = (t.c === _anch.ax && t.r === _anch.ay);
+        var _maxFuel = getMaxFuel(t);
+        var _lowFuel = (t.fuel != null && _maxFuel > 0 && t.fuel < 0.2 * _maxFuel);
+        var _leash = 1.5 * stats.rng * _eng.leashMul;
+        var _interval = 1.0 / (_eng.moveMul || 1);
+        t._pursueAcc = (t._pursueAcc || 0) + dt;
+        if (t._noTargetT == null) t._noTargetT = 0;
+        if (t.returning == null) t.returning = false;
+        var _tgtP = (!_lowFuel) ? findBestTarget(S, t, stats) : null;
+        var _wantHome = false;
+        if (_lowFuel && !_atAnchor) {
+          t.returning = true; // P2: prioridade sobre perseguir
+          _wantHome = true;
+        } else if (_lowFuel) {
+          t.returning = false;
+          t._pursueAcc = 0;
+        } else if (_tgtP && !_tgtP.dead) {
+          t._noTargetT = 0;
+          var _curLeashD = Math.hypot(t.x - _anch.x, t.y - _anch.y);
+          if (_curLeashD > _leash && !_atAnchor) { t.returning = true; _wantHome = true; } // encolheu o leash → volta p/ dentro
+          else {
+            t.returning = false;
+            if (t._pursueAcc >= _interval) {
+              t._pursueAcc = 0;
+              var _curD = Math.hypot(_tgtP.x - t.x, _tgtP.y - t.y);
+              var _best = null, _bd = _curD;
+              var _dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+              for (var _di = 0; _di < 4; _di++) {
+                var _nc = t.c + _dirs[_di][0], _nr = t.r + _dirs[_di][1];
+                if (_nc < 0 || _nc >= COLS || _nr < 0 || _nr >= ROWS) continue;
+                var _ck = _nc + ',' + _nr;
+                if (S.blocked[_ck] || S.occupied[_ck]) continue;
+                var _ccx = _nc * CELL + CELL / 2, _ccy = _nr * CELL + CELL / 2;
+                if (Math.hypot(_ccx - _anch.x, _ccy - _anch.y) > _leash) continue; // nunca passa do leash
+                var _dd = Math.hypot(_tgtP.x - _ccx, _tgtP.y - _ccy);
+                if (_dd < _bd - 1e-6) { _bd = _dd; _best = { c: _nc, r: _nr }; }
+              }
+              if (_best) tryPursueStep(S, t, _best.c, _best.r); // sem fuel → fica onde está (atira normal)
+            }
+          }
+        } else {
+          t._noTargetT += dt;
+          if (t._noTargetT >= 3 && !_atAnchor) { t.returning = true; _wantHome = true; }
+          else { t.returning = false; if (_atAnchor) t._pursueAcc = 0; }
+        }
+        if (_wantHome && t._pursueAcc >= _interval) {
+          t._pursueAcc = 0;
+          t._noTargetT = 3; // F5-fix: mantem estado de retorno p/ passos seguintes no mesmo ritmo (antes resetava p/ 0 e exigia +3s por celula)
+          var _hb = null, _hd = Math.hypot(t.x - _anch.x, t.y - _anch.y);
+          var _hdirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+          for (var _hi = 0; _hi < 4; _hi++) {
+            var _hc = t.c + _hdirs[_hi][0], _hr = t.r + _hdirs[_hi][1];
+            if (_hc < 0 || _hc >= COLS || _hr < 0 || _hr >= ROWS) continue;
+            var _hk = _hc + ',' + _hr;
+            if (S.blocked[_hk] || S.occupied[_hk]) continue;
+            var _hx = _hc * CELL + CELL / 2, _hy = _hr * CELL + CELL / 2;
+            var _hdd = Math.hypot(_hx - _anch.x, _hy - _anch.y);
+            if (_hdd < _hd - 1e-6) { _hd = _hdd; _hb = { c: _hc, r: _hr }; }
+          }
+          if (_hb && tryPursueStep(S, t, _hb.c, _hb.r)) {
+            if (t.c === _anch.ax && t.r === _anch.ay) { t.returning = false; t._noTargetT = 0; }
+          }
+          // sem fuel ou sem célula livre → para onde está (returning segue true p/ a UI ler)
+        }
+      } else if (t.returning) t.returning = false;
       let da = t.aimAngle - t.angle;
       while (da > Math.PI) da -= Math.PI * 2;
       while (da < -Math.PI) da += Math.PI * 2;
@@ -1479,6 +1879,18 @@
         if (t.specBranch === 'B' && def.specB && def.specB.prism) sweepN += def.specB.prism; // spec B vira base
         if (D.TIER_LOGIC.laser && D.TIER_LOGIC.laser[beamTier] && D.TIER_LOGIC.laser[beamTier].eff.sweepAdd && beamTier >= 3) sweepN += 0; // já na tabela
         if (t.beamTarget) {
+          // F2-sim R1: beam cobra battDrain*dt; sem batt → não dispara (mas mira continua)
+          if (t.batt != null && (def.battDrain || 0) > 0) {
+            var beamCost = (def.battDrain || 0) * dt;
+            if (t.batt < beamCost) {
+              f2Warn(S, t, 'batt');
+              if (prevId !== null) SND.laserStop('L' + t.tid);
+              t.beamTarget = null;
+              t.rampTime = 0;
+              continue;
+            }
+            t.batt = Math.max(0, t.batt - beamCost);
+          }
           t.aimAngle = Math.atan2(t.beamTarget.y - t.y, t.beamTarget.x - t.x);
           SND.laserStart('L' + t.tid);
           let dmgRate = stats.dmg;
@@ -1513,8 +1925,8 @@
           t.cooldown = stats.rate > 0 ? 1 / stats.rate : 0.5;
         }
       }
-      // G10: AUTO-MOVIMENTO PREDITIVO com toggle S.autoMove (default true)
-      if(S.autoMove !== false && (t.moveCd||0) <= 0 && S.state!=='victory' && S.state!=='defeat' && Math.random() < 0.008){
+      // G10: AUTO-MOVIMENTO PREDITIVO com toggle S.autoMove (default true) — F3: só na postura anchor
+      if((t.stance || 'anchor') === 'anchor' && S.autoMove !== false && (t.moveCd||0) <= 0 && S.state!=='victory' && S.state!=='defeat' && Math.random() < 0.008){
         const statsTmp = getTowerStats(S, t);
         const best = findBestTarget(S, t, statsTmp);
         let future = null;
@@ -1556,14 +1968,21 @@
         if(cells.length){
           cells.sort((a,b)=>b.score-a.score);
           const pick=cells[0];
-          // move sem custo, só cooldown
-          const oldKey=t.c+','+t.r;
-          delete S.occupied[oldKey];
-          t.c=pick.c; t.r=pick.r;
-          t.x=pick.c*CELL+CELL/2; t.y=pick.r*CELL+CELL/2;
-          S.occupied[pick.c+','+pick.r]=t;
-          t.moveCd = 2.2 + Math.random()*1.2;
-          ev(S,{t:'ring', x:t.x, y:t.y, maxR: CELL*1.2, col:def.color});
+          // F2-sim R1: auto-move cobra fuelPerCell por célula (Manhattan); sem fuel → não move (atira normalmente)
+          var mDist = Math.abs(pick.c - t.c) + Math.abs(pick.r - t.r);
+          var mCost = ((def && def.fuelPerCell != null ? def.fuelPerCell : 2)) * mDist;
+          if (t.fuel != null && t.fuel < mCost) {
+            f2Warn(S, t, 'fuel');
+          } else {
+            if (t.fuel != null) t.fuel = Math.max(0, t.fuel - mCost);
+            const oldKey=t.c+','+t.r;
+            delete S.occupied[oldKey];
+            t.c=pick.c; t.r=pick.r;
+            t.x=pick.c*CELL+CELL/2; t.y=pick.r*CELL+CELL/2;
+            S.occupied[pick.c+','+pick.r]=t;
+            t.moveCd = 2.2 + Math.random()*1.2;
+            ev(S,{t:'ring', x:t.x, y:t.y, maxR: CELL*1.2, col:def.color});
+          }
         }
       }
     }
@@ -1676,19 +2095,26 @@
 
 
   /* ---- A5: moveTower headless (orig scenes.js 4491-4514) ---- */
-  // Helper headless: moveTower
+  // Helper headless: moveTower (F2-sim: custa fuel, não créditos)
   function moveTower(S, t, nc, nr){
     if(!t || !S) return false;
     const dist = Math.abs(nc - t.c) + Math.abs(nr - t.r);
-    const range = t.moveRange || t.defRef.mobility || 3;
+    const range = t.moveRange || (t.defRef && t.defRef.mobility) || 3;
     if(dist === 0 || dist > range) { SND.error(); return false; }
     const key = nc+','+nr;
     if(S.blocked[key] || S.occupied[key]) { SND.error(); return false; }
     if(nc<0||nc>=COLS||nr<0||nr>=ROWS) return false;
     if((t.moveCd||0) > 0) { SND.error(); ev(S, {t:'float', x:t.x, y:t.y-14, txt:'RECARREGANDO '+t.moveCd.toFixed(1)+'s', col:'#fbbf24', size:11}); return false; }
-    // custo leve de movimento
-    if(S.credits < 8){ SND.error(); return false; }
-    S.credits -= 8;
+    // F2-sim R1: cobra fuelPerCell por célula; sem fuel → não move (atira normalmente)
+    var fuelPerCell = (t.defRef && t.defRef.fuelPerCell != null ? t.defRef.fuelPerCell : 2);
+    var fuelCost = fuelPerCell * dist;
+    if (t.fuel != null && t.fuel < fuelCost) {
+      SND.error();
+      ev(S, { t: 'resEmpty', res: 'fuel', tid: t.tid, x: t.x, y: t.y });
+      ev(S, {t:'float', x:t.x, y:t.y-14, txt:'SEM COMBUSTÍVEL', col:'#f43f5e', size:11});
+      return false;
+    }
+    if (t.fuel != null) t.fuel = Math.max(0, t.fuel - fuelCost);
     delete S.occupied[t.c+','+t.r];
     t.c = nc; t.r = nr;
     t.x = nc*CELL + CELL/2; t.y = nr*CELL + CELL/2;
@@ -1726,3 +2152,45 @@
     if(D.METAL_STAGES && D.METAL_STAGES[stageIdx]) return D.METAL_STAGES[stageIdx];
     return {id: NAVE_IDS[stageIdx]||'vertical', name:'Patrulha', bg:'#020617', accent:'#38bdf8', enemyPool:['drone','swarm'], duration:22, target:22, speed:1.0};
   }
+
+  /* ---- F2-sim: expõe getResupply (+aux) em window.DO sem tocar scenes.js ----
+   * sim.js carrega ANTES de scenes.js (que faz window.DO = {...}).
+   * Intercepta a atribuição futura e injeta os exports F2 de forma síncrona,
+   * para que o harness headless (vm, sem timers) já veja DO.getResupply. */
+  (function () {
+    try {
+      var F2_EXPORTS = {
+        getResupply: getResupply,
+        setStance: (typeof setStance !== 'undefined' ? setStance : null), // F3-pursue
+        buyComp: (typeof buyComp !== 'undefined' ? buyComp : null), // F4-comp C1
+        getFactoryBoost: getFactoryBoost,
+        getMaxFuel: getMaxFuel,
+        getMaxBatt: getMaxBatt,
+        getMaxAmmo: getMaxAmmo,
+        getReactorCapMul: getReactorCapMul,
+        getReactorTakeMul: getReactorTakeMul,
+        placeStation: (typeof placeStation !== 'undefined' ? placeStation : null),
+        placeSupport: (typeof placeSupport !== 'undefined' ? placeSupport : null)
+      };
+      var attachF2 = function (doObj) {
+        if (!doObj) return;
+        for (var k in F2_EXPORTS) {
+          try { if (F2_EXPORTS[k] != null) doObj[k] = F2_EXPORTS[k]; } catch (_) {}
+        }
+      };
+      if (typeof window !== 'undefined') {
+        if (window.DO) attachF2(window.DO);
+        try {
+          var _do = window.DO;
+          Object.defineProperty(window, 'DO', {
+            configurable: true,
+            enumerable: true,
+            get: function () { return _do; },
+            set: function (v) { _do = v; if (v) attachF2(v); }
+          });
+        } catch (_) {
+          try { if (typeof setTimeout !== 'undefined') setTimeout(function () { if (window.DO) attachF2(window.DO); }, 0); } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  })();

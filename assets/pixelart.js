@@ -1,6 +1,6 @@
 /* Defesa Orbital v3 — FASE 1: Pixel Art por Código (window.PXART)
    Sprites ASCII + paleta, 1 px lógico = 3 px reais. Sem pixelArt global.
-   Chaves novas (prevalecem sobre as antigas): tur_<id>_t<tier>, en_<tipo>, px_factory_l<n>, px_pr_<kind>. */
+   Chaves novas (prevalecem sobre as antigas): tur_<id>_t<tier>, en_<tipo>, px_factory_l<n>, px_pr_<kind>, st_<id>, ov_<track>(_hi). */
 'use strict';
 (function () {
   const TKN = (typeof window!=='undefined' && (window.TOKENS || (window.DO3 && window.DO3.TOKENS))) || null;
@@ -607,6 +607,172 @@
     }
   }
 
+  // ===== F1-E: estação + cargueiro (chaves EXATAS st_station / st_support) =====
+  // st_station ~20x20 lógicos: anel + docas N/S/E/W + luzes âmbar A #f5a83d, base S #0d1220.
+  // st_support ~14x10 lógicos: casco + 2 tanques ciano C #7dd3fc. Sem roxo.
+  const ST_ART = {
+    st_station: [
+      '........KKKK........',
+      '........KMMK........',
+      '.....KKKKMMKKKK.....',
+      '....KMMMMAAMMMMK....',
+      '...KMMGGMMMMGGMMK...',
+      '..KMMAMDDDDDDMAMMK..',
+      '..KMMAAMMMMMMAAMMK..',
+      '.KMMMK   MM   KMMMK.',
+      ' KMMMK KKKKKK KMMMK ',
+      'KAMMMKMKGAAGKMKMMMAK',
+      'KAMMMKMKSSSSKMKMMMAK',
+      ' KMMMK KKKKKK KMMMK ',
+      '.KMMMK   MM   KMMMK.',
+      '..KMMAAMMMMMMAAMMK..',
+      '..KMMAMDDDDDDMAMMK..',
+      '...KMMGGMMMMGGMMK...',
+      '....KMMMMAAMMMMK....',
+      '.....KKKKMMKKKK.....',
+      '........KMMK........',
+      '........KKKK........'
+    ],
+    st_support: [
+      '      KK      ',
+      '     KMMK     ',
+      '    KMGGMK    ',
+      ' KKKKMMMMKKKK ',
+      ' KCKKMDDMKKCK ',
+      ' KCKKMSSMKKCK ',
+      ' KWKKMMMMKKWK ',
+      ' KCKKDAADKKCK ',
+      ' KKKKMMMMKKKK ',
+      '     KAAK     '
+    ]
+  };
+  function stationPalette() {
+    return {
+      K: '#000000',
+      M: '#8b95a8',
+      D: '#334155',
+      A: '#f5a83d',
+      G: '#bfe3ff',
+      S: '#0d1220',
+      C: '#7dd3fc',
+      W: '#ffffff'
+    };
+  }
+  function buildStation(scene) {
+    const pal = stationPalette();
+    for (const key in ST_ART) {
+      if (scene.textures.exists(key)) continue;
+      const g = scene.make.graphics({ x: 0, y: 0, add: false });
+      const size = drawRows(g, ST_ART[key], pal);
+      g.generateTexture(key, Math.max(16, size.w), Math.max(16, size.h));
+      g.destroy();
+    }
+  }
+
+  // ===== F1-C3: overlays de componente (chaves EXATAS ov_<track> / ov_<track>_hi) =====
+  // Pequenos (<=10x10 lógicos), cor da track em C. Exibidos quando t.comp[track]>=1;
+  // versão forte (>=4) = 2ª textura ov_<track>_hi com pixels W extras (brilho/núcleo).
+  const OV_TRACK_COL = {
+    weapon: '#f87171',
+    engine: '#7dd3fc',
+    reactor: '#f5a83d',
+    target: '#34d399'
+  };
+  const OV_ART = {
+    // ov_weapon: cano extra apontando p/ cima.
+    ov_weapon: [
+      ' KKK ',
+      ' KCK ',
+      ' KCK ',
+      ' KCK ',
+      ' KCK ',
+      ' KCK ',
+      ' KCK ',
+      'KKKKK'
+    ],
+    ov_weapon_hi: [
+      'KWWWK',
+      'KWCWK',
+      'KWCWK',
+      'KWCWK',
+      'KWCWK',
+      'KWCWK',
+      'KWCWK',
+      'KKKKK'
+    ],
+    // ov_engine: brilho do motor (chama, ponta quente W).
+    ov_engine: [
+      ' KKK ',
+      ' KCK ',
+      'KCCCK',
+      'KCCCK',
+      'KCWCK',
+      ' KCK ',
+      '  W  '
+    ],
+    ov_engine_hi: [
+      '  KKK  ',
+      ' KCCCK ',
+      'KCWCWCK',
+      'KCCCCCK',
+      'KCCCCCK',
+      ' KWCWK ',
+      '   W   '
+    ],
+    // ov_reactor: anel do reator (hi = núcleo quente).
+    ov_reactor: [
+      '  KKK  ',
+      ' KCCCK ',
+      'KCC CCK',
+      'KC   CK',
+      'KCC CCK',
+      ' KCCCK ',
+      '  KKK  '
+    ],
+    ov_reactor_hi: [
+      '  KKK  ',
+      ' KCCCK ',
+      'KCCWCCK',
+      'KCWWWCK',
+      'KCCWCCK',
+      ' KCCCK ',
+      '  KKK  '
+    ],
+    // ov_target: antena (hi = barra de sinal + mastro/reforço).
+    ov_target: [
+      'K     K',
+      'KC   CK',
+      'KC   CK',
+      ' KCWCK ',
+      '   C   ',
+      '   C   ',
+      '  KKK  '
+    ],
+    ov_target_hi: [
+      'K     K',
+      'KC   CK',
+      'KCWCWCK',
+      ' KCWCK ',
+      '  WCW  ',
+      '   C   ',
+      ' KKKKK '
+    ]
+  };
+  function ovPalette(trackCol) {
+    return { K: '#000000', C: trackCol, W: '#ffffff' };
+  }
+  function buildOverlays(scene) {
+    for (const key in OV_ART) {
+      if (scene.textures.exists(key)) continue;
+      const track = key.replace(/_hi$/, '').replace(/^ov_/, '');
+      const pal = ovPalette(OV_TRACK_COL[track] || '#ffffff');
+      const g = scene.make.graphics({ x: 0, y: 0, add: false });
+      const size = drawRows(g, OV_ART[key], pal);
+      g.generateTexture(key, Math.max(16, size.w), Math.max(16, size.h));
+      g.destroy();
+    }
+  }
+
   // ===== U-ASTRO: o astronauta solitário (perfil contemplativo, eco da referência) =====
   // Paleta fechada sunset (sem roxo): traje M #8b95a8 / D #5a6d93, viseira V #ffe9bd
   // com reflexo W, rim light âmbar R #f5a83d num dos lados, base/sombra S #0d1220.
@@ -716,8 +882,10 @@
       buildProjectiles(scene);
       buildFactory(scene);
       buildAstro(scene);
+      buildStation(scene);
+      buildOverlays(scene);
     } catch (e) { console.error('[PXART]', e); }
   }
 
-  window.PXART = { build: buildAll, buildAll, PX, ENEMY_ART, TOWER_ART, PROJ_ART, ASTRO_ART, astroPalette, paintOn, buildAstro, enemyPalette, towerPalette, drawRows, tint };
+  window.PXART = { build: buildAll, buildAll, PX, ENEMY_ART, TOWER_ART, PROJ_ART, ASTRO_ART, ST_ART, OV_ART, OV_TRACK_COL, astroPalette, stationPalette, ovPalette, paintOn, buildAstro, buildStation, buildOverlays, enemyPalette, towerPalette, drawRows, tint };
 })();

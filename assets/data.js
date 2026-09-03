@@ -24,6 +24,7 @@ var DO3 = (function () {
     {
       id: 'cannon', name: 'Corveta Gauss', icon: '◉', color: '#e2e8f0', mobility: 3,
       cost: 50, dmg: 16, rng: 120, rate: 1.1, kind: 'bullet',
+      fuelCap: 100, battCap: 100, ammoCap: 40, ammoPerShot: 1, battDrain: 0, fuelPerCell: 2,
       desc: 'Bateria balística de alta precisão com perfuração leve.',
       specA: { name: 'Cerco Orbital', desc: 'Tiros de altíssimo calibre com concussão em área.', dmgMul: 2.2, rngAdd: 30, rateMul: 0.6, splash: 50 },
       specB: { name: 'Flak Quádrupla', desc: 'Dispara 4 projéteis rápidos em leque. Alcança voadores.', dmgMul: 0.7, rateMul: 2.2, multi: 4 }
@@ -31,6 +32,7 @@ var DO3 = (function () {
     {
       id: 'gatling', name: 'Caça Vulcan', icon: '⁂', color: '#fbbf24', mobility: 3,
       cost: 85, dmg: 6, rng: 105, rate: 4.2, kind: 'bullet',
+      fuelCap: 100, battCap: 100, ammoCap: 40, ammoPerShot: 1, battDrain: 0, fuelPerCell: 2, // ammoPerShot 1 por projétil
       desc: 'Cadência insana. Esmaga unidades leves e enxames.',
       specA: { name: 'Superaquecimento', desc: 'Rampa de dano contínuo até +250% no mesmo alvo.', ramp: true },
       specB: { name: 'Canhão de Fragmentação', desc: 'Micro-atordoamento de 0.2s e perfura 2 alvos.', stun: 0.2, pierce: 2 }
@@ -38,6 +40,7 @@ var DO3 = (function () {
     {
       id: 'laser', name: 'Destróier de Fótons', icon: '⌁', color: '#f43f5e', mobility: 3,
       cost: 115, dmg: 32, rng: 130, rate: 0, kind: 'beam',
+      fuelCap: 100, battCap: 100, ammoCap: 40, ammoPerShot: 0, battDrain: 6, fuelPerCell: 2,
       desc: 'Feixe contínuo de energia pura térmica. Atinge voadores.',
       specA: { name: 'Raio Desintegrador', desc: 'Multiplica o dano no mesmo alvo até 400%.', beamRamp: true },
       specB: { name: 'Prisma Prismático', desc: 'Divide o feixe em 3 alvos secundários.', prism: 3 }
@@ -45,6 +48,7 @@ var DO3 = (function () {
     {
       id: 'missile', name: 'Bombardeiro MIRV', icon: '➤', color: '#fb923c', mobility: 3,
       cost: 135, dmg: 42, rng: 145, rate: 0.6, kind: 'splash', splash: 65,
+      fuelCap: 100, battCap: 100, ammoCap: 40, ammoPerShot: 1, battDrain: 0, fuelPerCell: 2,
       desc: 'Ogivas autoguiadas com explosão de área pesada.',
       specA: { name: 'Enxame de Micro-Mísseis', desc: 'Salva de 4 micromísseis rápidos. Alcança voadores.', salvos: 4, dmgMul: 0.45 },
       specB: { name: 'Ogiva Termobárica', desc: 'Raio de explosão +70% com fogo residual.', splashAdd: 40, burn: true }
@@ -52,6 +56,7 @@ var DO3 = (function () {
     {
       id: 'cryo', name: 'Fragata Glacial', icon: '❄', color: '#38bdf8', mobility: 3,
       cost: 80, dmg: 6, rng: 110, rate: 0.85, kind: 'slow',
+      fuelCap: 100, battCap: 100, ammoCap: 40, ammoPerShot: 0, battDrain: 6, fuelPerCell: 2,
       desc: 'Pulso glacial que retarda a velocidade inimiga.',
       specA: { name: 'Zero Absoluto', desc: 'Congela 75% e alvos recebem +40% dano físico.', slowVal: 0.75, physDebuff: true },
       specB: { name: 'Nevasca Permanente', desc: 'Campo de frio constante ao redor da torre.', auraSlow: true }
@@ -59,6 +64,7 @@ var DO3 = (function () {
     {
       id: 'tesla', name: 'Cruzador Tempestade', icon: '⚡', color: '#34d399', mobility: 3,
       cost: 155, dmg: 15, rng: 115, rate: 1.15, kind: 'chain', chain: 4,
+      fuelCap: 100, battCap: 100, ammoCap: 40, ammoPerShot: 0, battDrain: 6, fuelPerCell: 2,
       desc: 'Relâmpagos que saltam entre múltiplos invasores.',
       specA: { name: 'Tempestade de Arcos', desc: 'Salta em até 8 alvos com chance de atordoar.', chainAdd: 4, stunChance: 0.35 },
       specB: { name: 'Pulso Eletrostático', desc: 'Dano multiplicado contra escudos azuis (+300%).', shieldBuster: true }
@@ -66,6 +72,7 @@ var DO3 = (function () {
     {
       id: 'sniper', name: 'Espectro Sniper', icon: '✜', color: '#67e8f9', mobility: 3,
       cost: 175, dmg: 95, rng: 290, rate: 0.32, kind: 'snipe',
+      fuelCap: 100, battCap: 100, ammoCap: 12, ammoPerShot: 1, battDrain: 0, fuelPerCell: 2,
       desc: 'Alcance global na arena. Foca o inimigo mais perigoso.',
       specA: { name: 'Tiro de Antimatéria', desc: 'Crítico de 400% e executa com menos de 15% HP.', critChance: 0.4, critMul: 4, exec: 0.15 },
       specB: { name: 'Marcador Holográfico', desc: 'Alvo marcado recebe +35% de dano de todas as torres.', spotter: true }
@@ -73,6 +80,7 @@ var DO3 = (function () {
     {
       id: 'venom', name: 'Infectador Nanopraga', icon: '☠', color: '#a3e635', mobility: 3,
       cost: 105, dmg: 9, rng: 120, rate: 0.75, kind: 'dot',
+      fuelCap: 100, battCap: 100, ammoCap: 40, ammoPerShot: 0, battDrain: 6, fuelPerCell: 2,
       desc: 'Névoa ácida corrosiva que dissolve blindagens.',
       specA: { name: 'Praga Contagiosa', desc: 'Inimigo que morre envenenado espalha a toxina.', plague: true },
       specB: { name: 'Ácido Corrosivo', desc: 'Reduz a armadura dos alvos a zero.', armorStrip: true }
@@ -80,6 +88,7 @@ var DO3 = (function () {
     {
       id: 'amp', name: 'Porta-Naves Amplificadora', icon: '▲', color: '#fde047', mobility: 3,
       cost: 125, dmg: 0, rng: 125, rate: 0, kind: 'buff',
+      fuelCap: 100, battCap: 100, ammoCap: 40, ammoPerShot: 1, battDrain: 0, fuelPerCell: 2,
       desc: 'Aumenta dano e alcance das torres vizinhas dentro do anel.',
       specA: { name: 'Reator de Sobrecarga', desc: '+45% Dano e +25% Cadência às vizinhas.', buffDmg: 0.45, buffRate: 0.25 },
       specB: { name: 'Radar de Varredura', desc: '+40% Alcance às vizinhas e revela camuflados.', buffRng: 0.4, reveal: true }
@@ -87,6 +96,7 @@ var DO3 = (function () {
     {
       id: 'rail', name: 'Encouraçado Railgun', icon: '╫', color: '#ffffff', mobility: 3,
       cost: 210, dmg: 65, rng: 230, rate: 0.4, kind: 'pierce',
+      fuelCap: 100, battCap: 100, ammoCap: 12, ammoPerShot: 1, battDrain: 0, fuelPerCell: 2,
       desc: 'Disparo hiperveloz que atravessa toda a linha. Nv4+ atinge voadores.',
       specA: { name: 'Trilho de Singularidade', desc: 'Perfura toda a extensão da arena causando dano puro.', fullPierce: true },
       specB: { name: 'Trilho Duplo Turbo', desc: 'Dois tiros alternados com cadência dobrada.', doubleShot: true, rateMul: 2.0 }
@@ -817,7 +827,56 @@ const FACTORY_DATA = {
   upgradePartsCost: lvl => 15 * lvl,
   upgradeCreditCost: lvl => Math.round(90 * Math.pow(1.8, lvl)),
   partsPerWave: lvl => 20 * lvl,
-  creditsPerWave: lvl => 18 * lvl
+  creditsPerWave: lvl => 18 * lvl,
+  fuelBoost: lvl => 0.25 * lvl
+};
+// E1/E2 — Estação Espacial (base fixa) e Nave de Apoio (móvel): reabastecem fuel/batt/ammo em raio
+const STATION_DATA = {
+  id: 'station', name: 'Estação Espacial', cost: 400, kind: 'station',
+  supplyRadius: 170, rates: { fuel: 12, batt: 14, ammo: 6 }, color: '#f5a83d',
+  desc: 'Base fixa de suprimento: reabastece combustível, bateria e munição das torres no raio.'
+};
+const SUPPORT_DATA = {
+  id: 'support', name: 'Nave de Apoio', cost: 90, kind: 'support',
+  supplyRadius: 95, rates: { fuel: 6, batt: 7, ammo: 3 }, color: '#7dd3fc',
+  desc: 'Nave logística móvel: reabastece combustível, bateria e munição das torres no raio.'
+};
+// C1 — Componentes (5 níveis cada; custo fixo créditos [60,110,180,280,420] e peças [0,5,10,20,35]).
+// Mults por pip: w dmg+6%/rate+3%; e move+15%/leash+10%; r caps+25%/recarga-recebida+10%; t range+4%/crit+2%.
+// NOTA p/ agente do sim (diminishing de múltiplas fontes): total = melhor + 0.5×(soma das demais).
+const COMP_DEFS = {
+  w: { name: 'Arma', desc: 'Amplifica dano e cadência da torre.',
+    levels: [
+      { credits: 60, parts: 0, dmgMul: 1.06, rateMul: 1.03 },
+      { credits: 110, parts: 5, dmgMul: 1.12, rateMul: 1.06 },
+      { credits: 180, parts: 10, dmgMul: 1.18, rateMul: 1.09 },
+      { credits: 280, parts: 20, dmgMul: 1.24, rateMul: 1.12 },
+      { credits: 420, parts: 35, dmgMul: 1.30, rateMul: 1.15 }
+    ] },
+  e: { name: 'Motor', desc: 'Amplifica mobilidade e alcance da âncora (leash).',
+    levels: [
+      { credits: 60, parts: 0, moveMul: 1.15, leashMul: 1.10 },
+      { credits: 110, parts: 5, moveMul: 1.30, leashMul: 1.20 },
+      { credits: 180, parts: 10, moveMul: 1.45, leashMul: 1.30 },
+      { credits: 280, parts: 20, moveMul: 1.60, leashMul: 1.40 },
+      { credits: 420, parts: 35, moveMul: 1.75, leashMul: 1.50 }
+    ] },
+  r: { name: 'Reator', desc: 'Amplifica capacidades de fuel/batt/ammo e recarga recebida.',
+    levels: [
+      { credits: 60, parts: 0, capMul: 1.25, takeMul: 1.10 },
+      { credits: 110, parts: 5, capMul: 1.50, takeMul: 1.20 },
+      { credits: 180, parts: 10, capMul: 1.75, takeMul: 1.30 },
+      { credits: 280, parts: 20, capMul: 2.00, takeMul: 1.40 },
+      { credits: 420, parts: 35, capMul: 2.25, takeMul: 1.50 }
+    ] },
+  t: { name: 'Mira', desc: 'Amplifica alcance e chance de crítico da torre.',
+    levels: [
+      { credits: 60, parts: 0, rngMul: 1.04, critAdd: 0.02 },
+      { credits: 110, parts: 5, rngMul: 1.08, critAdd: 0.04 },
+      { credits: 180, parts: 10, rngMul: 1.12, critAdd: 0.06 },
+      { credits: 280, parts: 20, rngMul: 1.16, critAdd: 0.08 },
+      { credits: 420, parts: 35, rngMul: 1.20, critAdd: 0.10 }
+    ] }
 };
 // Laboratório Hivemind: paga peças p/ aumentar HP dos inimigos na run (mais ouro)
 const HIVEMIND = {
@@ -898,7 +957,8 @@ const TIER_LOGIC = {
     parseWaveString, makeEndlessWave, wpToPixels, getPathLength, getPosAtDist,
     getPathBlockedCells, Save, ACHIEVEMENTS,
     MERGE_PARTS, TIER_STATS, TIER_NAMES, getTier, SHOT_PATTERNS, SUPERS_AUTO, superThreshold,
-    FACTORY_DATA, HIVEMIND, TIER_LOGIC
+    FACTORY_DATA, HIVEMIND, TIER_LOGIC,
+    STATION_DATA, SUPPORT_DATA, COMP_DEFS
   };
 })();
 if (typeof window !== 'undefined') window.DO3 = DO3;

@@ -490,6 +490,79 @@
         });
         bar.appendChild(card);
       })();
+      // F4-comp U1: cards compraveis Estação Espacial + Nave de Apoio (mesmo padrão da factory)
+      (() => {
+        const sd = D.STATION_DATA;
+        if (!sd) return;
+        const card = document.createElement('div');
+        card.className = 'shop-card chamf';
+        card.style.setProperty('--tc', sd.color);
+        card.style.borderColor = '#f5a83d';
+        card.dataset.id = 'station';
+        card.setAttribute('role', 'button');
+        card.tabIndex = 0;
+        card.setAttribute('aria-label', sd.name + '. Custo $' + sd.cost + '. Suprimento em raio ' + sd.supplyRadius);
+        card.innerHTML =
+          '<div class="sc-icon" style="color:' + sd.color + '">🛰</div>' +
+          '<div class="sc-body"><div class="sc-name" style="color:#f5a83d">' + sd.name + '</div>' +
+          '<div class="sc-cost">$' + sd.cost + '</div>' +
+          '<div class="sc-stats" style="font-family:JetBrains Mono,monospace;font-size:10px;color:#f5a83d;line-height:1.2">Raio ' + sd.supplyRadius + ' • +' + sd.rates.fuel + '/+' + sd.rates.batt + '/+' + sd.rates.ammo + '/s</div></div>';
+        this.bindTip(card,
+          '<b style="color:#f5a83d">' + sd.name + '</b><br>' +
+          '<span class="tt-muted">' + sd.desc + '</span><br>' +
+          'RAIO ' + sd.supplyRadius + ': <b>+' + sd.rates.fuel + ' fuel +' + sd.rates.batt + ' batt +' + sd.rates.ammo + ' ammo/s</b><br>' +
+          'NÃO combate • Venda 70%');
+        const pickSt = () => {
+          SND.ui();
+          if (this.S.credits < sd.cost) { SND.error(); return; }
+          this.placingId = (this.placingId === 'station') ? null : 'station';
+          this.selected = null;
+          this.refreshShopSel();
+        };
+        card.addEventListener('click', pickSt);
+        card.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          pickSt();
+        });
+        bar.appendChild(card);
+      })();
+      (() => {
+        const sd = D.SUPPORT_DATA;
+        if (!sd) return;
+        const card = document.createElement('div');
+        card.className = 'shop-card chamf';
+        card.style.setProperty('--tc', sd.color);
+        card.style.borderColor = '#7dd3fc';
+        card.dataset.id = 'support';
+        card.setAttribute('role', 'button');
+        card.tabIndex = 0;
+        card.setAttribute('aria-label', sd.name + '. Custo $' + sd.cost + '. Suprimento em raio ' + sd.supplyRadius);
+        card.innerHTML =
+          '<div class="sc-icon" style="color:' + sd.color + '">🚀</div>' +
+          '<div class="sc-body"><div class="sc-name" style="color:#7dd3fc">' + sd.name + '</div>' +
+          '<div class="sc-cost">$' + sd.cost + '</div>' +
+          '<div class="sc-stats" style="font-family:JetBrains Mono,monospace;font-size:10px;color:#7dd3fc;line-height:1.2">Raio ' + sd.supplyRadius + ' • +' + sd.rates.fuel + '/+' + sd.rates.batt + '/+' + sd.rates.ammo + '/s</div></div>';
+        this.bindTip(card,
+          '<b style="color:#7dd3fc">' + sd.name + '</b><br>' +
+          '<span class="tt-muted">' + sd.desc + '</span><br>' +
+          'RAIO ' + sd.supplyRadius + ': <b>+' + sd.rates.fuel + ' fuel +' + sd.rates.batt + ' batt +' + sd.rates.ammo + ' ammo/s</b><br>' +
+          'NÃO combate • Venda 70%');
+        const pickSu = () => {
+          SND.ui();
+          if (this.S.credits < sd.cost) { SND.error(); return; }
+          this.placingId = (this.placingId === 'support') ? null : 'support';
+          this.selected = null;
+          this.refreshShopSel();
+        };
+        card.addEventListener('click', pickSu);
+        card.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          pickSu();
+        });
+        bar.appendChild(card);
+      })();
     }
 
     refreshShopSel() {
@@ -556,7 +629,7 @@
       // v3 PIXEL FASE 2/6: badge de tier no painel
       const tierBadge = '<span style="font-family:JetBrains Mono;font-size:10px;font-weight:800;color:' +
         (D.getTier(t.level) >= 5 ? '#fbbf24' : '#38bdf8') + ';margin-left:6px">T' + D.getTier(t.level) + (t.level >= D.TOWER_MAX_LVL ? ' MESTRE ★' : '') + '</span>';
-      this.el('tp-icon').textContent = def.icon;
+      this.el('tp-icon').textContent = def.icon || (def.id === 'station' ? '🛰' : (def.id === 'support' ? '🚀' : '◉'));
       this.el('tp-icon').style.color = def.color;
       this.el('tp-name').textContent = def.name;
       // ULTRA: mostra nível 1-50 como número + barra + tier dots
@@ -590,7 +663,12 @@
       mergeBuy.classList.add('hidden');
       const tier = D.getTier(t.level);
       const isFactory = def.kind === 'factory';
-      if (!isFactory && t.level >= tierCap(t)) {
+      const isF4Building = (def.kind === 'station' || def.kind === 'support'); // F4-comp: prédios sem upgrade/fusão
+      if (isF4Building) {
+        up.textContent = 'PRÉDIO • SEM UPGRADE';
+        up.disabled = true;
+        up.title = 'Estação/Apoio não sobem de nível';
+      } else if (!isFactory && t.level >= tierCap(t)) {
         // v3 PIXEL FASE 2: botão vira FUNDIR no teto do tier
         const cands = mergeCandidates(this.S, t);
         const partsCost = D.MERGE_PARTS[tier] || 0;
@@ -641,6 +719,125 @@
         box.className = 'tierlogic-info';
         specBox2.appendChild(box);
       })();
+      this._syncF4Panel(t); // F4-comp U1: res-bars + stance + componentes
+    }
+
+    /* F4-comp U1: preenche #res-*/ /*fill/num, #tp-stance, #comp-*-pips/buy (onclick idempotente; sem addEventListener p/ não empilhar no refresh de 12 frames) */
+    _syncF4Panel(t) {
+      if (!t) return;
+      const self = this;
+      try {
+        const gMF = (typeof getMaxFuel === 'function') ? getMaxFuel : null;
+        const gMB = (typeof getMaxBatt === 'function') ? getMaxBatt : null;
+        const gMA = (typeof getMaxAmmo === 'function') ? getMaxAmmo : null;
+        const maxF = gMF ? gMF(t) : (t.maxFuel != null ? t.maxFuel : 100);
+        const maxB = gMB ? gMB(t) : (t.maxBatt != null ? t.maxBatt : 100);
+        const maxA = gMA ? gMA(t) : (t.maxAmmo != null ? t.maxAmmo : 40);
+        const rows = [
+          ['fuel', (t.fuel != null ? t.fuel : maxF), maxF],
+          ['batt', (t.batt != null ? t.batt : maxB), maxB],
+          ['ammo', (t.ammo != null ? t.ammo : maxA), maxA]
+        ];
+        for (const [k, cur, max] of rows) {
+          const fill = document.getElementById('res-' + k + '-fill');
+          const num = document.getElementById('res-' + k + '-num');
+          if (max <= 0) {
+            if (fill) fill.style.width = '0%';
+            if (num) num.textContent = '—';
+            continue;
+          }
+          const pct = Math.max(0, Math.min(100, Math.round(cur / max * 100)));
+          if (fill) fill.style.width = pct + '%';
+          if (num) num.textContent = Math.floor(cur) + '/' + Math.round(max) + ' • ' + pct + '%';
+        }
+      } catch (_) {}
+      try {
+        const stBtn = this.el('tp-stance');
+        if (stBtn) {
+          const pursuing = (t.stance === 'pursue');
+          stBtn.textContent = pursuing ? '🎯 PERSEGUIR' : '⚓ ANCORADA';
+          stBtn.onclick = () => {
+            try {
+              const fn = (typeof setStance === 'function') ? setStance : (window.DO && window.DO.setStance);
+              if (fn) fn(self.S, t, pursuing ? 'anchor' : 'pursue');
+              try { SND.ui(); } catch (_) {}
+            } catch (_) {}
+            try { self.showTowerPanel(t); } catch (_) {}
+          };
+        }
+      } catch (_) {}
+      try {
+        const tracks = ['w', 'e', 'r', 't'];
+        for (const tr of tracks) {
+          const lvl = ((t.comp && t.comp[tr]) | 0) || 0;
+          const pipsEl = document.querySelector('#comp-' + tr + ' .comp-pips');
+          if (pipsEl) {
+            let html = '';
+            for (let i = 0; i < 5; i++) html += '<i class="' + (i < lvl ? 'on' : '') + '"></i>';
+            pipsEl.innerHTML = html;
+          }
+          const buyEl = document.getElementById('comp-' + tr + '-buy');
+          if (!buyEl) continue;
+          if (lvl >= 5) {
+            buyEl.textContent = 'MAX';
+            buyEl.disabled = true;
+            buyEl.onclick = null;
+            continue;
+          }
+          const cdef = D.COMP_DEFS && D.COMP_DEFS[tr];
+          const next = cdef && cdef.levels && cdef.levels[lvl];
+          if (!next) {
+            buyEl.textContent = 'MAX';
+            buyEl.disabled = true;
+            buyEl.onclick = null;
+            continue;
+          }
+          let txt = '+$' + next.credits;
+          if (next.parts) txt += ' +' + next.parts + '⚙';
+          buyEl.textContent = txt;
+          buyEl.disabled = (self.S.credits < next.credits) || ((self.S.parts || 0) < (next.parts || 0));
+          buyEl.onclick = ((tr2) => () => {
+            try {
+              const bf = (typeof buyComp === 'function') ? buyComp : (window.DO && window.DO.buyComp);
+              if (bf) bf(self.S, t, tr2);
+            } catch (_) {}
+            try { self.showTowerPanel(t); } catch (_) {}
+          })(tr);
+        }
+      } catch (_) {}
+    }
+
+    /* F4-comp U1: espelho DOM do anel de suprimento (.supply-ring em #board-shell, % do board).
+     * #board-shell tem o mesmo aspect do board e o canvas preenche inset 0 100%: % direto é exato. */
+    _syncSupplyRing() {
+      const shell = this.el('board-shell');
+      if (!shell) return;
+      let cx = null, cy = null, rad = null;
+      if ((this.placingId === 'station' || this.placingId === 'support') && this.hoverCell) {
+        const pd = this.placingId === 'station' ? D.STATION_DATA : D.SUPPORT_DATA;
+        const hc = this.hoverCell;
+        if (pd && hc.c >= 0 && hc.c < COLS && hc.r >= 0 && hc.r < ROWS) {
+          cx = hc.c * CELL + CELL / 2; cy = hc.r * CELL + CELL / 2; rad = pd.supplyRadius;
+        }
+      } else if (this.selected && this.selected.defRef) {
+        const sd = this.selected.defRef;
+        if (sd.kind === 'station' || sd.kind === 'support' || sd.id === 'station' || sd.id === 'support') {
+          rad = (sd.supplyRadius != null ? sd.supplyRadius
+            : (sd.id === 'station' ? D.STATION_DATA.supplyRadius : D.SUPPORT_DATA.supplyRadius));
+          cx = this.selected.x; cy = this.selected.y;
+        }
+      }
+      const key = (cx == null) ? 'hide' : (Math.round(cx) + '|' + Math.round(cy) + '|' + Math.round(rad));
+      if (this._supplyRingKey === key) return;
+      this._supplyRingKey = key;
+      let ring = shell.querySelector(':scope > .supply-ring');
+      if (cx == null) { if (ring) ring.style.display = 'none'; return; }
+      if (!ring) { ring = document.createElement('div'); ring.className = 'supply-ring'; shell.appendChild(ring); }
+      ring.style.display = 'block';
+      ring.style.left = ((cx - rad) / BW * 100) + '%';
+      ring.style.top = ((cy - rad) / BH * 100) + '%';
+      ring.style.width = (rad * 2 / BW * 100) + '%';
+      ring.style.height = (rad * 2 / BH * 100) + '%';
     }
 
     hideTowerPanel() {
@@ -678,6 +875,7 @@
         up.disabled = this.S.credits < cc || (this.S.parts || 0) < pc2;
       }
       el('tp-sell').textContent = 'VENDER • $' + sellValue(t);
+      this._syncF4Panel(t); // F4-comp U1: res-bars + stance + componentes também no painel da fábrica
     }
 
     bindTip(el, html) {
@@ -1271,9 +1469,22 @@
         ui.fillCircle(this.selected.x, this.selected.y, st.rng);
         ui.lineStyle(1.4, 0xfbbf24, 0.9);
         ui.strokeRect(this.selected.c * CELL + 2, this.selected.r * CELL + 2, CELL - 4, CELL - 4);
+        // F4-comp U1: anel de suprimento âmbar ao selecionar station/support
+        try {
+          const _sd = this.selected.defRef || {};
+          const _sr = (_sd.supplyRadius != null ? _sd.supplyRadius
+            : (_sd.id === 'station' && D.STATION_DATA ? D.STATION_DATA.supplyRadius
+            : (_sd.id === 'support' && D.SUPPORT_DATA ? D.SUPPORT_DATA.supplyRadius : 0)));
+          if (_sr > 0) {
+            ui.lineStyle(1.4, 0xf5a83d, 0.7);
+            ui.strokeCircle(this.selected.x, this.selected.y, _sr);
+            ui.fillStyle(0xf5a83d, 0.04);
+            ui.fillCircle(this.selected.x, this.selected.y, _sr);
+          }
+        } catch (_) {}
       }
       if (this.placingId) {
-        const def = D.TOWERS_DATA.find(d => d.id === this.placingId) || (this.placingId === 'factory' ? Object.assign({ rng: 70 }, D.FACTORY_DATA) : null); // v3 PIXEL FASE 5
+        const def = D.TOWERS_DATA.find(d => d.id === this.placingId) || (this.placingId === 'factory' ? Object.assign({ rng: 70 }, D.FACTORY_DATA) : null) || (this.placingId === 'station' && D.STATION_DATA ? Object.assign({}, D.STATION_DATA) : null) || (this.placingId === 'support' && D.SUPPORT_DATA ? Object.assign({}, D.SUPPORT_DATA) : null); // v3 PIXEL FASE 5 + F4-comp U1
         if (!def) { this.placingId = null; return; }
         const c = this.hoverCell.c, r = this.hoverCell.r;
         if (c >= 0 && c < COLS && r >= 0 && r < ROWS) {
@@ -1282,11 +1493,21 @@
           const colr = okCell ? 0x34d399 : 0xf43f5e;
           ui.lineStyle(1.6, colr, 0.95);
           ui.strokeRect(c * CELL + 2, r * CELL + 2, CELL - 4, CELL - 4);
-          ui.lineStyle(1.4, colr, 0.55);
-          ui.strokeCircle(cx, cy, def.rng);
+          if (def.rng) {
+            ui.lineStyle(1.4, colr, 0.55);
+            ui.strokeCircle(cx, cy, def.rng);
+          }
+          // F4-comp U1: fantasma de station/support mostra o anel de suprimento
+          if (def.supplyRadius) {
+            ui.lineStyle(1.4, 0xf5a83d, 0.7);
+            ui.strokeCircle(cx, cy, def.supplyRadius);
+            ui.fillStyle(0xf5a83d, 0.04);
+            ui.fillCircle(cx, cy, def.supplyRadius);
+          }
           if (!okCell) { ui.fillStyle(0xf43f5e, 0.08); ui.fillCircle(cx, cy, CELL / 2); }
         }
       }
+      try { this._syncSupplyRing(); } catch (_) {} // F4-comp U1: espelho DOM .supply-ring
       if (this.armed) {
         const meta = D.SUPERS[this.armed];
         ui.lineStyle(1.8, Phaser.Display.Color.HexStringToColor(meta.color).color, 0.8);
@@ -1367,15 +1588,18 @@
     syncTowers() {
       for (const t of this.S.towers) {
         let v = this.towerViews[t.tid];
-        const tkey = t.defRef.kind === 'factory'
+        const tkind = t.defRef.kind;
+        const tkey = tkind === 'factory'
           ? 'px_factory_l' + Math.min(5, t.level)
-          : 'tur_' + t.defRef.id + '_t' + D.getTier(t.level); // v3 PIXEL: tier/factory texture
+          : tkind === 'station' ? 'st_station'
+          : tkind === 'support' ? 'st_support'
+          : 'tur_' + t.defRef.id + '_t' + D.getTier(t.level); // v3 PIXEL: tier/factory/station/support texture
         if (!v || v.lastTexKey !== tkey) {
           if (v && v.lastTexKey !== tkey && this.textures.exists(tkey)) { v.tur.setTexture(tkey); v.lastTexKey = tkey; }
         }
         if (!v) {
           const base = this.add.image(t.x, t.y, 'tbase').setVisible(false).setAlpha(0); // borda removida
-          const tur = this.add.image(t.x, t.y, this.textures.exists(tkey) ? tkey : ('tur_' + t.defRef.id + '_1'));
+          const tur = this.add.image(t.x, t.y, this.textures.exists(tkey) ? tkey : 'dot');
           const pips = this.add.container(t.x, t.y + 15);
           base.setDepth(30); tur.setDepth(31); pips.setDepth(32);
           v = { base, tur, pips, lastLevel: t.level };
@@ -1389,12 +1613,40 @@
         v.pips.setPosition(t.x, t.y+15);
         if(v.ultraGlow) v.ultraGlow.setPosition(t.x, t.y);
         if(v.odFlame) v.odFlame.setPosition(t.x, t.y);
+        // F4-comp C3: overlays de componente (ov_<track> quando comp>=1, _hi quando >=4); pips/tiers intactos
+        try {
+          const _ovMap = { w: 'weapon', e: 'engine', r: 'reactor', t: 'target' };
+          if (!v.ovs) v.ovs = {};
+          const _comp = t.comp || {};
+          for (const _tk in _ovMap) {
+            const _lvl = ((_comp[_tk] | 0) || 0);
+            const _nm = _ovMap[_tk];
+            const _key = _lvl >= 4 ? ('ov_' + _nm + '_hi') : (_lvl >= 1 ? ('ov_' + _nm) : null);
+            let _im = v.ovs[_tk];
+            if (!_key || !(this.textures && this.textures.exists && this.textures.exists(_key))) {
+              if (_im) _im.setVisible(false);
+              continue;
+            }
+            if (!_im) {
+              _im = this.add.image(t.x, t.y, _key).setDepth(32);
+              v.ovs[_tk] = _im;
+            } else if (!_im.texture || _im.texture.key !== _key) {
+              try { _im.setTexture(_key); } catch (_) {}
+            }
+            _im.setVisible(true).setPosition(t.x, t.y);
+            if (_tk === 'w') _im.setRotation((t.angle || 0) + Math.PI / 2);
+            else _im.setRotation(0);
+          }
+        } catch (_) {}
         v.tur.rotation = (t.angle || 0) + Math.PI / 2;
         v.tur.setScale(1 + (t.recoil || 0) * 0.12);
         if (t.flash > 0) v.tur.setTintFill(0xffffff); else v.tur.clearTint();
         if (t.level !== v.lastLevel) {
           // v3 PIXEL: troca textura por TIER (escala visual 1.0/1.08/1.18/1.30/1.45)
-          const tk = 'tur_' + t.defRef.id + '_t' + D.getTier(t.level);
+          const tk = tkind === 'factory' ? 'px_factory_l' + Math.min(5, t.level)
+            : tkind === 'station' ? 'st_station'
+            : tkind === 'support' ? 'st_support'
+            : 'tur_' + t.defRef.id + '_t' + D.getTier(t.level);
           if (this.textures.exists(tk)) { v.tur.setTexture(tk); v.lastTexKey = tk; }
           const tierScale = [1, 1, 1.08, 1.18, 1.30, 1.45][D.getTier(t.level)] || 1;
           v.tur.baseScale = tierScale;
@@ -1413,6 +1665,7 @@
           try{ if(v.ultraGlow) v.ultraGlow.destroy(); }catch(e){}
           try{ if(v.odFlame) v.odFlame.destroy(); }catch(e){}
           try{ if(v.aura) v.aura.destroy(); }catch(e){}
+          try{ if(v.ovs) for (const _k in v.ovs) { try{ v.ovs[_k].destroy(); }catch(e){} } }catch(e){}
           delete this.towerViews[tid];
         }
       }
