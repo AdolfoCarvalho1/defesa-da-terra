@@ -5,6 +5,9 @@
 (function () {
   const TKN = (typeof window!=='undefined' && (window.TOKENS || (window.DO3 && window.DO3.TOKENS))) || null;
   const PX = (TKN && TKN.PIXEL && TKN.PIXEL.PX) || 3; // escala: 1 pixel lógico = 3px reais
+  // ONDA 4: chaves já geradas pelo PXART nesta página — evita regenerar ~150 texturas a cada Boot/Menu.
+  // O override único (vetorial→pixel art) roda na 1ª vez; depois disso o exists() basta.
+  const _pxartKeys = new Set();
 
   // helper de desenho: rows ASCII + palette por caractere
   function drawRows(g, rows, pal) {
@@ -519,12 +522,14 @@
       }
       // Legado também recebe a arte nova; makeTextures cria uma versão vetorial antes do PXART.
       const legacyKey = 'tur_' + def.id + '_1';
+      if (_pxartKeys.has(legacyKey) && scene.textures.exists(legacyKey)) continue; // ONDA 4: já é pixel art
       try { if (scene.textures.exists(legacyKey)) scene.textures.remove(legacyKey); } catch (e) {}
       const rows = applyTierArt(base, 1, pal);
       const g = scene.make.graphics({ x: 0, y: 0, add: false });
       const size = drawRows(g, rows, pal);
       g.generateTexture(legacyKey, Math.max(16, size.w), Math.max(16, size.h));
       g.destroy();
+      _pxartKeys.add(legacyKey);
     }
   }
 
@@ -533,6 +538,7 @@
     for (const type in ED) {
       const def = ED[type];
       const key = 'en_' + type;
+      if (_pxartKeys.has(key) && scene.textures.exists(key)) continue; // ONDA 4: já é pixel art (não remove/regenera)
       // IDENTIDADE UNIFICADA: força pixel art mesmo se já existir textura vetorial antiga (makeTextures criou 'en_' via drawEnemyShape)
       if(scene.textures.exists(key)){
         try{
@@ -560,32 +566,12 @@
       if (offX || offY) g.restore();
       g.generateTexture(key, dim, dim);
       g.destroy();
+      _pxartKeys.add(key);
     }
   }
 
-  function buildProjectiles(scene) {
-    const PAL = getTOK();
-    const projPal = {
-      K: (TKN && TKN.PIXEL && TKN.PIXEL.K) || '#000000',
-      W: (TKN && TKN.PIXEL && TKN.PIXEL.W) || '#ffffff',
-      O: (PAL && PAL.bioOrange) || '#fb923c',
-      Y: (PAL && PAL.gold) || '#fbbf24',
-      R: (PAL && PAL.red) || '#f43f5e',
-      G: (PAL && PAL.cyan) || '#bfe3ff',
-      L: (PAL && PAL.acid) || '#a3e635',
-      C: (PAL && PAL.cyan) || '#38bdf8',
-      B: (PAL && PAL.shieldBlue) || '#60a5fa',
-      N: (PAL && PAL.green) || '#34d399'
-    };
-    for (const kind in PROJ_ART) {
-      const key = 'px_pr_' + kind;
-      if (scene.textures.exists(key)) continue;
-      const g = scene.make.graphics({ x: 0, y: 0, add: false });
-      const size = drawRows(g, PROJ_ART[kind], projPal);
-      g.generateTexture(key, size.w, size.h);
-      g.destroy();
-    }
-  }
+  // ONDA 5: buildProjectiles removido — as 8 texturas px_pr_* eram órfãs (sem consumidores no jogo).
+  // PROJ_ART continua exportado em window.PXART (dados/API pública preservados).
 
   function buildFactory(scene) {
     const PAL = getTOK();
@@ -879,7 +865,6 @@
     try {
       buildTowerTextures(scene);
       buildEnemyTextures(scene);
-      buildProjectiles(scene);
       buildFactory(scene);
       buildAstro(scene);
       buildStation(scene);

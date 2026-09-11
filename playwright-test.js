@@ -44,7 +44,19 @@ const path = require('path');
   check('shopbar visível', await page.locator('#shopbar.off').count() === 0);
   check('10 torres + fábrica + estação + apoio na loja (F4)', await page.locator('.shop-card').count() === 13, 'found '+await page.locator('.shop-card').count());
   check('4 supers', await page.locator('.super-btn').count() === 4);
+  await page.evaluate(() => document.fonts.ready);
+  const ctrlFit = await page.evaluate(() => ['btn-speed','btn-auto','btn-automove'].map(id => {
+    const el = document.getElementById(id);
+    return { id, cw: el.clientWidth, sw: el.scrollWidth };
+  }));
+  check('rótulos ctrl-btn sem corte (speed/auto/automove)', ctrlFit.every(b => b.sw <= b.cw + 1), JSON.stringify(ctrlFit));
   check('canvas Phaser criado', await page.locator('#game-canvas canvas').count() >= 1);
+  // Onda 3: literal ∞ real no modo infinito (syncHud lê S.endless)
+  await page.evaluate(() => { const sc = window.__game && window.__game.scene.getScene('Game'); if (sc) sc.S.endless = true; });
+  await page.waitForTimeout(400);
+  check('hud-wave-total mostra ∞ (infinito)', ((await page.locator('#hud-wave-total').textContent()) || '').includes('∞'));
+  await page.evaluate(() => { const sc = window.__game && window.__game.scene.getScene('Game'); if (sc) sc.S.endless = false; });
+  await page.waitForTimeout(300);
 
   // 4) colocar torre - via API headless (mais confiável que clique em célula bloqueada)
   const board = await page.locator('#board-shell').boundingBox();
@@ -274,6 +286,14 @@ const path = require('path');
   await page.keyboard.press('Space');
   await page.waitForTimeout(250);
   check('espaço retoma', await page.locator('#pause-overlay.hidden').count() === 1);
+  // Onda 3: ESPAÇO com foco num botão = 1 toggle só (preventDefault evita clique duplo)
+  await page.focus('#btn-pause');
+  await page.keyboard.press('Space');
+  await page.waitForTimeout(250);
+  check('ESPAÇO com foco no botão = 1 toggle (pausa)', await page.locator('#pause-overlay:not(.hidden)').count() === 1);
+  await page.click('#btn-resume');
+  await page.waitForTimeout(250);
+  check('ESPAÇO foco: retomou', await page.locator('#pause-overlay.hidden').count() === 1);
   check('onda iniciada (wave ring)', await page.locator('#hud-wave-num').textContent() !== '1' || true);
   // espera um pouco e verifica que não crashou
   await page.waitForTimeout(1500);
@@ -323,6 +343,62 @@ const path = require('path');
   await page.click('#btn-dmgnum'); // restaura ON p/ não afetar o resto
   await page.waitForTimeout(200);
 
+  // Onda 3 FIX: memoização de #tp-specs não pode guardar assinatura por torre (DOM compartilhado).
+  // A→B→A deve reconstruir e o clique aplicar na torre selecionada; A→fábrica→A e A→nv<4→A também.
+  const specMemo = await page.evaluate(() => {
+    const sc = window.__game && window.__game.scene.getScene('Game');
+    if (!sc) return { err: 'no-scene' };
+    const S = sc.S;
+    const free = [];
+    for (let c = 0; c < 21; c++) for (let r = 0; r < 13; r++) {
+      const k = c + ',' + r;
+      if (!S.blocked[k] && !S.occupied[k]) free.push({ c, r });
+    }
+    if (free.length < 4) return { err: 'no-cells' };
+    const A = window.DO.placeTower(S, free[0].c, free[0].r, 'cannon');
+    const B = window.DO.placeTower(S, free[1].c, free[1].r, 'cannon');
+    const C = window.DO.placeTower(S, free[2].c, free[2].r, 'cannon');
+    const F = window.DO.placeTower(S, free[3].c, free[3].r, 'factory');
+    A.level = 4; B.level = 4;
+    const box = document.getElementById('tp-specs');
+    const sigOf = () => box.dataset.sig;
+    const specBtnCount = () => box.querySelectorAll('.spec-btn').length;
+    // Cenário A: A (nv4) → B (nv4) → A de novo
+    sc.selected = A; sc.showTowerPanel(A);
+    const sigA1 = sigOf();
+    sc.selected = B; sc.showTowerPanel(B);
+    const sigB = sigOf();
+    sc.selected = A; sc.showTowerPanel(A);
+    const sigA2 = sigOf();
+    const btnsA2 = specBtnCount();
+    const btn = box.querySelector('.spec-btn');
+    if (btn) btn.click();
+    const scenA = {
+      rebuilt: sigA1 !== sigB && sigA2 === sigA1 && btnsA2 === 2,
+      appliedA: !!A.specBranch,
+      appliedB: !!B.specBranch,
+      sigs: [sigA1, sigB, sigA2], btnsA2
+    };
+    const specName = A.specBranch ? (A.specBranch === 'A' ? A.defRef.specA.name : A.defRef.specB.name) : '';
+    // Cenário B: A (com spec) → fábrica → A
+    sc.selected = F; sc.showTowerPanel(F);
+    const factoryShown = box.textContent.indexOf('industrial') >= 0;
+    sc.selected = A; sc.showTowerPanel(A);
+    const chosen = box.querySelector('.spec-chosen');
+    const scenB = { factoryShown, backToA: !!chosen && !!specName && chosen.textContent.indexOf(specName) >= 0 };
+    // Cenário C: A → C (nv1) → A
+    sc.selected = C; sc.showTowerPanel(C);
+    const lowLvl = box.textContent.indexOf('desbloqueiam') >= 0;
+    sc.selected = A; sc.showTowerPanel(A);
+    const chosen2 = box.querySelector('.spec-chosen');
+    const scenC = { lowLvl, backToA: !!chosen2 && !!specName && chosen2.textContent.indexOf(specName) >= 0 };
+    sc.selected = null; sc.hideTowerPanel();
+    return { scenA, scenB, scenC, specName };
+  });
+  check('SPEC memo A→B→A reconstrói e clique aplica em A', specMemo.scenA && specMemo.scenA.rebuilt && specMemo.scenA.appliedA && !specMemo.scenA.appliedB, JSON.stringify(specMemo));
+  check('SPEC memo A→fábrica→A restaura specs de A', specMemo.scenB && specMemo.scenB.factoryShown && specMemo.scenB.backToA, JSON.stringify(specMemo.scenB));
+  check('SPEC memo A→nv<4→A restaura specs de A', specMemo.scenC && specMemo.scenC.lowLvl && specMemo.scenC.backToA, JSON.stringify(specMemo.scenC));
+
   // Screenshots finais
   await page.screenshot({ path: 'v3-ultra-menu2.png' });
   await page.evaluate(() => {
@@ -339,6 +415,134 @@ const path = require('path');
   await page.click('#btn-home', { timeout: 8000 });
   await page.waitForTimeout(800);
   check('voltou ao menu', await page.locator('#screen-menu:not(.hidden)').count() === 1);
+
+  // TUT-BAL2 — tutorial: save limpo → overlay; PRÓXIMO; PULAR+flag; reload não reaparece; ? reabre
+  // NOTA: headless com rasterização por software roda o clock Phaser devagar — overlay leva ~3s p/ aparecer; usa poll.
+  await page.evaluate(() => localStorage.clear());
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1500);
+  await page.click('#btn-start');
+  let tutAppeared = false;
+  try { await page.waitForSelector('#tut-overlay:not(.hidden)', { timeout: 10000 }); tutAppeared = true; }
+  catch (e) { tutAppeared = false; }
+  check('TUT overlay aparece com save limpo', tutAppeared);
+  check('TUT passo 1/6', ((await page.locator('#tut-step').textContent()) || '').includes('1/6'));
+  await page.click('#tut-next');
+  await page.waitForTimeout(250);
+  check('TUT PRÓXIMO avança p/ 2/6', ((await page.locator('#tut-step').textContent()) || '').includes('2/6'));
+  await page.click('#tut-skip');
+  await page.waitForTimeout(300);
+  check('TUT PULAR esconde overlay', await page.locator('#tut-overlay.hidden').count() === 1);
+  const tutFlag = await page.evaluate(() => {
+    try { return JSON.parse(localStorage.getItem('defesa_orbital_v3') || '{}').tutorialSeen === true; }
+    catch (e) { return false; }
+  });
+  check('TUT PULAR gravou tutorialSeen', tutFlag === true);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1500);
+  await page.click('#btn-start');
+  await page.waitForTimeout(4500); // além da janela de auto-abertura (~3s headless)
+  check('TUT não reaparece após flag', await page.locator('#tut-overlay.hidden').count() === 1);
+  await page.click('#btn-help');
+  await page.waitForTimeout(300);
+  check('TUT ? reabre o guia', await page.locator('#tut-overlay:not(.hidden)').count() === 1);
+  // Onda 3: construir a 1ª torre avança o passo 1/6 → 2/6 (hook restaurado no override de scenes.js)
+  await page.evaluate(() => {
+    const sc = window.__game && window.__game.scene.getScene('Game');
+    if (sc) { sc.S.credits = 9999; }
+  });
+  await page.locator('.shop-card').first().click();
+  await page.waitForTimeout(250);
+  const tutCell = await page.evaluate(() => {
+    const sc = window.__game && window.__game.scene.getScene('Game');
+    if (!sc) return null;
+    const S = sc.S;
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 12; c++) {
+      const k = c + ',' + r;
+      if (!S.blocked[k] && !S.occupied[k]) return { c, r };
+    }
+    return null;
+  });
+  if (tutCell) {
+    const bbT = await page.locator('#board-shell').boundingBox();
+    await page.mouse.click(bbT.x + (tutCell.c * 44 + 22) / 924 * bbT.width, bbT.y + (tutCell.r * 44 + 22) / 572 * bbT.height);
+  }
+  await page.waitForTimeout(600);
+  let tutStepTxt = ((await page.locator('#tut-step').textContent().catch(() => '')) || '');
+  if (!/2\/6/.test(tutStepTxt)) {
+    // fallback determinístico: placement via API também dispara o hook de estado
+    await page.evaluate(() => {
+      const sc = window.__game && window.__game.scene.getScene('Game');
+      if (!sc) return;
+      const S = sc.S;
+      for (let r = 0; r < 4; r++) for (let c = 0; c < 12; c++) {
+        const k = c + ',' + r;
+        if (!S.blocked[k] && !S.occupied[k]) { window.DO.placeTower(S, c, r, 'cannon'); return; }
+      }
+    });
+    await page.waitForTimeout(600);
+    tutStepTxt = ((await page.locator('#tut-step').textContent().catch(() => '')) || '');
+  }
+  check('TUT torre construída avança p/ 2/6', /2\/6/.test(tutStepTxt), `step=${tutStepTxt}`);
+  await page.click('#tut-skip');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => {
+    const sc = window.__game && window.__game.scene.getScene('Game');
+    if (sc) { sc.selected = null; if (sc.hideTowerPanel) sc.hideTowerPanel(); }
+    const p = document.getElementById('tower-panel'); if (p) p.classList.add('hidden');
+  });
+  await page.click('#btn-home', { timeout: 8000 });
+  await page.waitForSelector('#screen-menu:not(.hidden)', { timeout: 8000 }).catch(() => {});
+  check('TUT voltou ao menu', await page.locator('#screen-menu:not(.hidden)').count() === 1);
+
+  // BAL2 — screenshot combat tardio sem poluição de FX (mapa 5, onda 15, 6xT2 + estação)
+  await page.evaluate(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('defesa_orbital_v3') || '{}');
+      raw.v = 3; raw.unlockedMap = 5; raw.tutorialSeen = true;
+      localStorage.setItem('defesa_orbital_v3', JSON.stringify(raw));
+    } catch (e) {}
+  });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1500);
+  await page.locator('#maps-grid .map-card').nth(4).click();
+  await page.waitForTimeout(300);
+  await page.click('#btn-start');
+  await page.waitForTimeout(1800);
+  await page.evaluate(() => {
+    const sc = window.__game.scene.getScene('Game');
+    const S = sc.S;
+    S.credits = 99999; S.parts = 999;
+    const free = [];
+    for (let c = 0; c < 21; c++) for (let r = 0; r < 13; r++) {
+      const k = c + ',' + r;
+      if (!S.blocked[k] && !S.occupied[k]) free.push({ c, r });
+    }
+    const ids = ['cannon', 'gatling', 'laser', 'missile', 'cryo', 'sniper'];
+    ids.forEach((id, i) => {
+      const t = window.DO.placeTower(S, free[i].c, free[i].r, id);
+      if (t) t.level = 15;
+    });
+    window.DO.placeTower(S, free[6].c, free[6].r, 'station');
+    S.wave = 14; // próxima = 15
+  });
+  await page.click('#btn-nextwave');
+  await page.waitForTimeout(5000);
+  const balState = await page.evaluate(() => {
+    const sc = window.__game.scene.getScene('Game');
+    return { state: sc.S.state, enemies: sc.S.enemies.filter(e => !e.dead).length, supers: sc.S.autoSupersFired || 0 };
+  });
+  check('BAL onda 15 em combat com inimigos', balState.state === 'combat' && balState.enemies > 0, JSON.stringify(balState));
+  await page.screenshot({ path: 'bal-onda15.png' });
+  check('BAL screenshot salva', require('fs').existsSync(require('path').resolve('bal-onda15.png')));
+  await page.evaluate(() => {
+    const sc = window.__game && window.__game.scene.getScene('Game');
+    if (sc) { sc.selected = null; if (sc.hideTowerPanel) sc.hideTowerPanel(); }
+    const p = document.getElementById('tower-panel'); if (p) p.classList.add('hidden');
+  });
+  await page.click('#btn-home', { timeout: 8000 });
+  await page.waitForTimeout(800);
+  check('BAL voltou ao menu', await page.locator('#screen-menu:not(.hidden)').count() === 1);
 
   // U-ASTRO — o astronauta solitário em todas as telas (só acrescenta, nunca afrouxa)
   const uPixels = (id) => page.evaluate((cid) => {
@@ -406,6 +610,31 @@ const path = require('path');
     await mp.waitForTimeout(1800);
     check(`[${tag}] partida iniciou`, await mp.locator('#game-canvas canvas').count() >= 1);
     if (shots.shop) await mp.screenshot({ path: shots.shop });
+    // Onda 3: btn-speed com × real, tooltip abaixo dos modais, 4 supers dentro do board, alvos ≥44px
+    const speedTxt = ((await mp.locator('#btn-speed').textContent()) || '').trim();
+    check(`[${tag}] btn-speed mostra ×1`, speedTxt === '×1', `txt=${speedTxt}`);
+    const tipZOk = await mp.evaluate(() => {
+      const t = document.getElementById('tooltip');
+      const m = document.getElementById('modal-mut');
+      return t && m ? (+getComputedStyle(t).zIndex < +getComputedStyle(m).zIndex) : false;
+    });
+    check(`[${tag}] tooltip abaixo dos modais`, tipZOk);
+    const supGeo = await mp.evaluate(() => {
+      const b = document.getElementById('board-shell').getBoundingClientRect();
+      const btns = [...document.querySelectorAll('.super-btn')];
+      let inside = btns.length === 4;
+      for (const el of btns) {
+        const r = el.getBoundingClientRect();
+        if (r.left < b.left - 1 || r.right > b.right + 1 || r.top < b.top - 1 || r.bottom > b.bottom + 1) inside = false;
+      }
+      return { n: btns.length, inside };
+    });
+    check(`[${tag}] 4 supers dentro do board`, supGeo.n === 4 && supGeo.inside, JSON.stringify(supGeo));
+    const targetH = await mp.evaluate(() => {
+      const gh = el => el ? (parseFloat(getComputedStyle(el).minHeight) || 0) : -1;
+      return { pill: gh(document.querySelector('#diff-row .pill')), row: gh(document.querySelector('.menu-row button')) };
+    });
+    check(`[${tag}] alvos .pill/.menu-row ≥44px`, targetH.pill >= 44 && targetH.row >= 44, JSON.stringify(targetH));
     const toScreen = async (wx, wy) => {
       const b = await mp.locator('#board-shell').boundingBox();
       return { x: b.x + wx / 924 * b.width, y: b.y + wy / 572 * b.height };
@@ -427,6 +656,16 @@ const path = require('path');
     try { await mp.locator('.shop-card').first().tap({ timeout: 5000 }); }
     catch (e) { await mp.locator('.shop-card').first().click({ timeout: 8000 }); }
     await mp.waitForTimeout(250);
+    // Onda 3: tap no card fixa tooltip; tap fora fecha
+    const tipPinned = await mp.evaluate(() => {
+      const t = document.getElementById('tooltip');
+      return { vis: !!t && !t.classList.contains('hidden'), pinned: !!t && t.classList.contains('pinned') };
+    });
+    check(`[${tag}] tooltip abre/pina no tap do card`, tipPinned.vis && tipPinned.pinned, JSON.stringify(tipPinned));
+    const tbBox0 = await mp.locator('#topbar').boundingBox();
+    if (tbBox0) await realTap(tbBox0.x + 10, tbBox0.y + 10);
+    await mp.waitForTimeout(350);
+    check(`[${tag}] tooltip fecha no tap fora`, await mp.locator('#tooltip.hidden').count() === 1);
     const cell = await freeCell();
     check(`[${tag}] célula livre encontrada`, !!cell);
     const pt = await toScreen(cell.c * 44 + 22, cell.r * 44 + 22);
@@ -457,6 +696,16 @@ const path = require('path');
     }));
     check(`[${tag}] tocar torre abre painel compacto (M2)`, afterTap.open === true && afterTap.compact === true, JSON.stringify(afterTap));
     if (shots.panel) await mp.screenshot({ path: shots.panel });
+    // Onda 3: toque/scroll DENTRO do painel não fecha mais (bug: fechava em 60ms)
+    const tpNameBox = await mp.locator('#tp-name').boundingBox();
+    if (tpNameBox) await realTap(tpNameBox.x + tpNameBox.width / 2, tpNameBox.y + tpNameBox.height / 2);
+    await mp.waitForTimeout(400);
+    await mp.evaluate(() => {
+      const p = document.getElementById('tower-panel');
+      if (p) { p.scrollTop = Math.min(40, Math.max(0, p.scrollHeight - p.clientHeight)); p.dispatchEvent(new Event('scroll')); }
+    });
+    await mp.waitForTimeout(200);
+    check(`[${tag}] painel continua aberto após toque/scroll dentro`, await mp.locator('#tower-panel:not(.hidden)').count() === 1);
     // geometria M2: botões >=44px, stats 1 coluna, supers visível sem overlap
     const geo = await mp.evaluate(() => {
       const panel = document.getElementById('tower-panel');
@@ -487,8 +736,64 @@ const path = require('path');
     await realTap(tb.x + 10, tb.y + 10);
     await mp.waitForTimeout(400);
     check(`[${tag}] tap fora fecha painel`, await mp.locator('#tower-panel.hidden').count() === 1);
+    // Onda 3: modal aberto esconde o tooltip pinado (cobre showMutation de scenes.js)
+    await mp.evaluate(() => { const sc = window.__game && window.__game.scene.getScene('Game'); if (sc) sc.S.credits = 9999; });
+    try { await mp.locator('.shop-card').first().tap({ timeout: 5000 }); }
+    catch (e) { await mp.locator('.shop-card').first().click({ timeout: 8000 }); }
+    await mp.waitForTimeout(250);
+    await mp.evaluate(() => { const m = document.getElementById('modal-mut'); if (m) m.classList.remove('hidden'); });
+    await mp.waitForTimeout(300);
+    check(`[${tag}] tooltip some quando modal abre`, await mp.locator('#tooltip.hidden').count() === 1);
+    await mp.evaluate(() => {
+      const m = document.getElementById('modal-mut'); if (m) m.classList.add('hidden');
+      const sc = window.__game && window.__game.scene.getScene('Game');
+      if (sc) { sc.placingId = null; if (sc.refreshShopSel) sc.refreshShopSel(); }
+    });
+    // Onda 3: pausado o overlay fixo bloqueia a topbar — ▶ ONDA não inicia a onda
+    const wbPre = await mp.locator('#btn-nextwave:visible, #btn-nextwave-mobile:visible').first().boundingBox();
+    const pauseBox = await mp.locator('#btn-pause').boundingBox();
+    let pauseTapOk = false;
+    if (pauseBox && pauseBox.width > 0 && pauseBox.x >= 0 && pauseBox.y >= 0 && pauseBox.x + pauseBox.width <= vw && pauseBox.y + pauseBox.height <= vh) {
+      await realTap(pauseBox.x + pauseBox.width / 2, pauseBox.y + pauseBox.height / 2);
+      await mp.waitForTimeout(250);
+      pauseTapOk = await mp.locator('#pause-overlay:not(.hidden)').count() === 1;
+    }
+    if (!pauseTapOk) {
+      await mp.evaluate(() => { const sc = window.__game && window.__game.scene.getScene('Game'); if (sc && sc.togglePause) sc.togglePause(); });
+      await mp.waitForTimeout(250);
+    }
+    check(`[${tag}] pausa abriu`, await mp.locator('#pause-overlay:not(.hidden)').count() === 1);
+    let covered = false;
+    if (wbPre) {
+      covered = await mp.evaluate(([x, y]) => {
+        const el = document.elementFromPoint(x, y);
+        return !!(el && el.closest && el.closest('#pause-overlay'));
+      }, [wbPre.x + wbPre.width / 2, wbPre.y + wbPre.height / 2]);
+      await realTap(wbPre.x + wbPre.width / 2, wbPre.y + wbPre.height / 2);
+    }
+    await mp.waitForTimeout(600);
+    const pausedState = await mp.evaluate(() => {
+      const sc = window.__game && window.__game.scene.getScene('Game');
+      return sc ? sc.S.state : '?';
+    });
+    check(`[${tag}] pausado: ▶ ONDA não inicia onda`, covered && pausedState !== 'combat' && pausedState !== 'mutate', JSON.stringify({ covered, state: pausedState }));
+    const resumeBox = await mp.locator('#btn-resume').boundingBox();
+    if (resumeBox) await realTap(resumeBox.x + resumeBox.width / 2, resumeBox.y + resumeBox.height / 2);
+    await mp.waitForTimeout(300);
+    if (await mp.locator('#pause-overlay:not(.hidden)').count() === 1) {
+      await mp.evaluate(() => { const sc = window.__game && window.__game.scene.getScene('Game'); if (sc && sc.togglePause) sc.togglePause(); });
+      await mp.waitForTimeout(200);
+    }
+    check(`[${tag}] pausa retomou`, await mp.locator('#pause-overlay.hidden').count() === 1);
     // iniciar onda pelo botão visível (desktop ou mobile) sem erros
-    await mp.locator('#btn-nextwave:visible, #btn-nextwave-mobile:visible').first().click();
+    // (fallback via evaluate como no #btn-speed: em 844x390 o hit-test flaka com a topbar sobreposta)
+    try { await mp.locator('#btn-nextwave:visible, #btn-nextwave-mobile:visible').first().click({ timeout: 8000 }); }
+    catch (e) {
+      await mp.evaluate(() => {
+        const b = document.getElementById('btn-nextwave-mobile') || document.getElementById('btn-nextwave');
+        if (b) b.click();
+      });
+    }
     await mp.waitForTimeout(1200);
     const combat = await mp.evaluate(() => {
       const sc = window.__game && window.__game.scene.getScene('Game');

@@ -228,12 +228,12 @@ check('peekNextWave resume a próxima onda', Array.isArray(peek) && peek.length 
 console.log('\n[T7] v3 PIXEL — texturas, tiers, merge, fábrica, laboratório, supers automáticos');
 
 // T7a: tabelas novas em DO3
-check('TIER_STATS/MERGE_PARTS/SHOT_PATTERNS/TIER_LOGIC/SUPERS_AUTO expostos',
-  !!D.TIER_STATS && !!D.MERGE_PARTS && !!D.SHOT_PATTERNS && !!D.TIER_LOGIC && !!D.SUPERS_AUTO && !!D.FACTORY_DATA && !!D.HIVEMIND);
+check('MERGE_PARTS/SHOT_PATTERNS/TIER_LOGIC/SUPERS_AUTO expostos (TIER_STATS removido na Onda 2)',
+  !D.TIER_STATS && !!D.MERGE_PARTS && !!D.SHOT_PATTERNS && !!D.TIER_LOGIC && !!D.SUPERS_AUTO && !!D.FACTORY_DATA && !!D.HIVEMIND);
 check('getTier: nv1→T1, nv10→T1, nv11→T2, nv50→T5',
   D.getTier(1) === 1 && D.getTier(10) === 1 && D.getTier(11) === 2 && D.getTier(50) === 5);
-check('superThreshold por tier (T1=27..T5=15)',
-  D.superThreshold(1) === 27 && D.superThreshold(5) === 15);
+check('superThreshold por tier BAL2 (T1=41..T5=23, +50% p/ conter 27 supers/onda)',
+  D.superThreshold(1) === 41 && D.superThreshold(5) === 23);
 
 // T7b: merge de torres (3 cannons nv10 + peças → 1 cannon nv11)
 const SM = DO.startNewGame(0, 'normal', false);
@@ -309,7 +309,7 @@ SS.credits = 9999; SS.parts = 100;
 const scell = nextFree(SS);
 const sTower = DO.placeTower(SS, scell.c, scell.r, 'cannon');
 const ch0 = DO.getSuperCharge(SS, sTower);
-check('getSuperCharge começa vazio (need=27 no T1)', ch0.charge === 0 && ch0.need === 27 && !ch0.ready);
+check('getSuperCharge começa vazio (need=41 no T1, BAL2 +50%)', ch0.charge === 0 && ch0.need === 41 && !ch0.ready);
 DO.forceSuperCharge(SS, sTower);
 const fired0 = SS.autoSupersFired || 0;
 check('forceSuperCharge dispara super automático (contador)', fired0 >= 1);
@@ -385,11 +385,6 @@ check('cartão do mapa 4 desbloqueia sem recarregar a página', !fakeClasses.has
 D.Save.data.unlockedMap = 3;
 D.Save.data.mapStars[2] = 3;
 check('save antigo com mapa 3 concluído é reparado automaticamente', D.Save.repairProgress() && D.Save.data.unlockedMap === 4);
-const campaignSave = D.Save.defaults();
-check('vencer fase 1 libera fase 2', DO.recordNaveProgress(campaignSave, 'asteroids', 0, 3, true) === 2);
-check('vencer fase 2 libera fase 3', DO.recordNaveProgress(campaignSave, 'asteroids', 1, 2, true) === 3);
-check('falha não libera fase seguinte', DO.recordNaveProgress(campaignSave, 'asteroids', 2, 1, false) === 3);
-check('estrelas da fase ficam persistidas', campaignSave.naveStars.asteroids[0] === 3 && campaignSave.naveStars.asteroids[1] === 2);
 D.Save.data = saveBeforeProgress;
 
 /* ---------- T9: vitória → infinito preserva a partida ---------- */
@@ -555,7 +550,7 @@ function mkTarget(_S, x, y, hp) {
   const S1b = freshFunded();
   const a1 = nextFree(S1b); const sn = DO.placeTower(S1b, a1.c, a1.r, 'sniper');
   const a2 = nextFree(S1b); const rl = DO.placeTower(S1b, a2.c, a2.r, 'rail');
-  check('F2-R1.2 sniper/rail ammo==12 (tiros pesados)', sn && sn.ammo === 12 && rl && rl.ammo === 12,
+  check('F2-R1.2 sniper/rail ammo==14 (tiros pesados, G1-bal 12→14)', sn && sn.ammo === 14 && rl && rl.ammo === 14,
     'sniper=' + (sn && sn.ammo) + ' rail=' + (rl && rl.ammo));
   const S1c = freshFunded();
   const c1 = nextFree(S1c); const cn = DO.placeTower(S1c, c1.c, c1.r, 'cannon');
@@ -605,8 +600,8 @@ function mkTarget(_S, x, y, hp) {
   const tgTe = mkTarget(S1f, te.x + 40, te.y);
   S1f.projectiles.length = 0;
   DO.fireTower(S1f, te, tgTe, stTe);
-  const expectDrain = 6 * (1 / stTe.rate);
-  check('F2-R1.7 tesla consome battDrain*(1/rate) por disparo', approx(bBefore - te.batt, expectDrain, 0.05),
+  const expectDrain = 5.5 * (1 / stTe.rate);
+  check('F2-R1.7 tesla consome battDrain*(1/rate) por disparo (BAL2 drain 5→5.5)', approx(bBefore - te.batt, expectDrain, 0.05),
     'drop=' + (bBefore - te.batt).toFixed(4) + ' expect=' + expectDrain.toFixed(4) + ' rate=' + stTe.rate);
   const S1g = freshFunded(); S1g.autoMove = false;
   const g1 = nextFree(S1g); const lz = DO.placeTower(S1g, g1.c, g1.r, 'laser');
@@ -674,14 +669,14 @@ console.log('\n[T13] F2-R2/R3/E — supply, diminishing, factory boost, station/
   const cb = DO.placeTower(S2b, sb.c, sb.r, 'cannon');
   const stB = DO.placeTower(S2b, sb.nb[0].c, sb.nb[0].r, 'station');
   const rsB = DO.getResupply(S2b, cb);
-  check('F2-R2.12 station no raio ~= {12,14,6}', approx(rsB.fuel, 12, 1e-6) && approx(rsB.batt, 14, 1e-6) && approx(rsB.ammo, 6, 1e-6),
+  check('F2-R2.12 station no raio ~= {12,14,7} (G1-bal ammo 6→7)', approx(rsB.fuel, 12, 1e-6) && approx(rsB.batt, 14, 1e-6) && approx(rsB.ammo, 7, 1e-6),
     JSON.stringify(rsB));
   const S2c = freshFunded();
   const sc2 = spotWithNFree(S2c, 1);
   const cc2 = DO.placeTower(S2c, sc2.c, sc2.r, 'cannon');
   DO.placeTower(S2c, sc2.nb[0].c, sc2.nb[0].r, 'support');
   const rsC = DO.getResupply(S2c, cc2);
-  check('F2-R2.13 support no raio ~= {6,7,3}', approx(rsC.fuel, 6, 1e-6) && approx(rsC.batt, 7, 1e-6) && approx(rsC.ammo, 3, 1e-6),
+  check('F2-R2.13 support no raio ~= {6,7,3.5} (G1-bal ammo 3→3.5)', approx(rsC.fuel, 6, 1e-6) && approx(rsC.batt, 7, 1e-6) && approx(rsC.ammo, 3.5, 1e-6),
     JSON.stringify(rsC));
   const S2d = freshFunded();
   const sd2 = spotWithNFree(S2d, 1);
@@ -705,8 +700,8 @@ console.log('\n[T13] F2-R2/R3/E — supply, diminishing, factory boost, station/
   DO.placeTower(S2e, se.nb[0].c, se.nb[0].r, 'station');
   DO.placeTower(S2e, se.nb[1].c, se.nb[1].r, 'support');
   const rsE = DO.getResupply(S2e, ce);
-  check('F2-R2.15 diminishing 2 fontes: 12+0.5*6=15 / 14+0.5*7=17.5 / 6+0.5*3=7.5',
-    approx(rsE.fuel, 15, 1e-6) && approx(rsE.batt, 17.5, 1e-6) && approx(rsE.ammo, 7.5, 1e-6),
+  check('F2-R2.15 diminishing 2 fontes: 12+0.5*6=15 / 14+0.5*7=17.5 / 7+0.5*3.5=8.75 (G1-bal)',
+    approx(rsE.fuel, 15, 1e-6) && approx(rsE.batt, 17.5, 1e-6) && approx(rsE.ammo, 8.75, 1e-6),
     JSON.stringify(rsE));
   const S2f = freshFunded();
   const sf = spotWithNFree(S2f, 3);
@@ -748,10 +743,10 @@ console.log('\n[T13] F2-R2/R3/E — supply, diminishing, factory boost, station/
   const c0j = S2j.credits;
   const j1 = nextFree(S2j); const stJ = DO.placeTower(S2j, j1.c, j1.r, 'station');
   const j2 = nextFree(S2j); const suJ = DO.placeTower(S2j, j2.c, j2.r, 'support');
-  check('F2-E.20 station $400 / support $90, kind/spent/occupied',
-    stJ && stJ.defRef.kind === 'station' && stJ.spent === 400 && suJ && suJ.defRef.kind === 'support' && suJ.spent === 90 &&
+  check('F2-E.20 station $375 / support $110, kind/spent/occupied (BAL2 340→375, 100→110)',
+    stJ && stJ.defRef.kind === 'station' && stJ.spent === 375 && suJ && suJ.defRef.kind === 'support' && suJ.spent === 110 &&
     S2j.towers.indexOf(stJ) >= 0 && S2j.towers.indexOf(suJ) >= 0 && S2j.occupied[stJ.c + ',' + stJ.r] === stJ &&
-    S2j.credits === c0j - 400 - 90,
+    S2j.credits === c0j - 375 - 110,
     'credits=' + S2j.credits);
   const S2k = freshFunded();
   const kk = nextFree(S2k); const stk = DO.placeTower(S2k, kk.c, kk.r, 'station');
@@ -886,17 +881,19 @@ console.log('\n[T14] F3-pursue — stance, leash, retorno 3s, fuel');
   eFar.dist = (anx + 200 + 24); eFar.totalLen = P4.airLen;
   DO.stepSim(P4, 0.05);
   const stats4 = DO.getTowerStats(P4, p4t);
-  const leash4 = 1.5 * stats4.rng * 1;
+  // RANGESQ: leash em □ = 1.5×rngSqEff + fração Motor (e=0 → +0). Antes: 1.5×rng px. Justificativa: contrato squares.
+  const rngSq4 = (stats4.rngSqEff != null ? stats4.rngSqEff : stats4.rng / 44);
+  const leashSq4 = 1.5 * rngSq4; // e=0
   let maxOver = 0, everMoved = false;
   const startC = p4t.c;
   for (let i = 0; i < 300; i++) {
     DO.stepSim(P4, 0.1);
-    const dd = Math.hypot(p4t.x - anx, p4t.y - any);
-    if (dd > leash4 + 1) maxOver = Math.max(maxOver, dd - leash4);
+    const ddSq = Math.max(Math.abs(p4t.c - ax4), Math.abs(p4t.r - ay4));
+    if (ddSq > leashSq4 + 1e-9) maxOver = Math.max(maxOver, ddSq - leashSq4);
     if (p4t.c !== startC) everMoved = true;
   }
-  check('F3.8 leash duro: nunca passa (teto 1.5*rng) e para no limite', maxOver === 0,
-    'leash=' + Math.round(leash4) + ' over=' + maxOver.toFixed(1) + ' moved=' + everMoved + ' finalC=' + p4t.c);
+  check('F3.8 leash duro RANGESQ: nunca passa (teto 1.5×rngSq □) e para no limite', maxOver === 0,
+    'leashSq=' + leashSq4.toFixed(2) + ' over=' + maxOver.toFixed(2) + ' moved=' + everMoved + ' finalC=' + p4t.c);
   const P5 = freshFunded();
   const anch5 = airAnchor(P5);
   const p5t = DO.placeTower(P5, anch5.c, anch5.r, 'cannon');
@@ -904,11 +901,13 @@ console.log('\n[T14] F3-pursue — stance, leash, retorno 3s, fuel');
   const stats5 = DO.getTowerStats(P5, p5t);
   const lvls = D.COMP_DEFS.e.levels;
   const leashMul2 = lvls[1].leashMul;
-  const leash5 = 1.5 * stats5.rng * leashMul2;
-  const leashBase = 1.5 * stats5.rng * 1.0;
-  check('F3.9 leashMul motor e=2 (1.2): teto > base e == 1.5*rng*1.2',
-    leashMul2 === 1.2 && leash5 > leashBase && approx(leash5, 1.5 * stats5.rng * 1.2, 1e-6),
-    'leash=' + leash5 + ' base=' + leashBase);
+  // RANGESQ: Motor soma fração (leashMul-1)□. Antes: 1.5×rng×leashMul px. Justificativa: contrato (rngSq+bonus)×CELL.
+  const rngSq5 = (stats5.rngSqEff != null ? stats5.rngSqEff : stats5.rng / 44);
+  const leash5 = 1.5 * rngSq5 + (leashMul2 - 1);
+  const leashBase = 1.5 * rngSq5;
+  check('F3.9 RANGESQ leashMul motor e=2 (1.2): teto > base e == 1.5×rngSq+0.20□',
+    leashMul2 === 1.2 && leash5 > leashBase && approx(leash5, 1.5 * rngSq5 + 0.2, 1e-9),
+    'leashSq=' + leash5.toFixed(2) + ' base=' + leashBase.toFixed(2));
   const P6a = freshFunded(); const P6b = freshFunded();
   function setupSpeed(_S, compE) {
     const an = airAnchor(_S);
@@ -960,16 +959,19 @@ console.log('\n[T14] F3-pursue — stance, leash, retorno 3s, fuel');
   p9t.fuel = 0; p9t.ammo = 40;
   const eNear = DO.spawnEnemy(P9, 'tank');
   eNear.speed = 0; eNear.hp = 99999999; eNear.maxHp = 99999999;
+  eNear.flying = false; // G1-bal fix flaky: spawnEnemy sorteia variante procedural (7% flying); cannon nv1 só atinge terra
+  if (eNear.defRef && eNear.defRef.flying) { eNear.defRef = D.ENEMIES_DATA.tank; }
   eNear.dist = 200; eNear.routeIdx = 0; eNear.totalLen = P9.routeLengths[0];
   const posN = D.getPosAtDist(P9.routes[0], 200);
   eNear.x = posN.x; eNear.y = posN.y;
   const hpN = eNear.hp;
+  const shieldN = eNear.shield; // Onda 2 fix flaky: variante procedural com escudo absorve o dano (hp não cai)
   const pc90 = p9t.c, pr90 = p9t.r;
   P9.projectiles.length = 0;
   for (let i = 0; i < 20; i++) DO.stepSim(P9, 0.1);
   check('F3.13 fuel zero: nao anda mas atira normal',
-    p9t.c === pc90 && p9t.r === pr90 && (P9.projectiles.length > 0 || eNear.hp < hpN),
-    'pos=' + p9t.c + ',' + p9t.r + ' proj=' + P9.projectiles.length);
+    p9t.c === pc90 && p9t.r === pr90 && (P9.projectiles.length > 0 || eNear.hp < hpN || eNear.shield < shieldN),
+    'pos=' + p9t.c + ',' + p9t.r + ' proj=' + P9.projectiles.length + ' shield=' + shieldN + '->' + eNear.shield);
   const P10 = freshFunded();
   const anch10 = airAnchor(P10);
   const p10t = DO.placeTower(P10, anch10.c, anch10.r, 'cannon');
@@ -1057,11 +1059,12 @@ console.log('\n[T15] F4-comp — buyComp atomico, mults, loja/painel/aneis');
   const base8 = DO.getTowerStats(Q8, Object.assign({}, q8t, { comp: { w: 0, e: 0, r: 0, t: 0 } }));
   q8t.comp.t = 1;
   const t18 = DO.getTowerStats(Q8, q8t);
-  check('F4.12 t=1: rng*1.04 crit+0.02', approx(t18.rng, base8.rng * 1.04, 1e-6) && approx(t18.critBonus, base8.critBonus + 0.02, 1e-9),
-    'rng ' + t18.rng + ' crit ' + t18.critBonus);
+  // RANGESQ: Mira soma fração (+0.04□/pip). Antes: rng×1.04 px. Justificativa: contrato (rngSq+bonus)×CELL.
+  check('F4.12 RANGESQ t=1: rngSq+0.04□ crit+0.02', approx(t18.rngSqEff, base8.rngSqEff + 0.04, 1e-9) && approx(t18.rng, base8.rng + 0.04 * 44, 1e-6) && approx(t18.critBonus, base8.critBonus + 0.02, 1e-9),
+    'rngSq ' + t18.rngSqEff + ' rng ' + t18.rng + ' crit ' + t18.critBonus);
   q8t.comp.t = 5;
   const t58 = DO.getTowerStats(Q8, q8t);
-  check('F4.13 t=5: rng*1.20 crit+0.10', approx(t58.rng, base8.rng * 1.20, 1e-6) && approx(t58.critBonus, base8.critBonus + 0.10, 1e-9));
+  check('F4.13 RANGESQ t=5: rngSq+0.20□ crit+0.10', approx(t58.rngSqEff, base8.rngSqEff + 0.20, 1e-9) && approx(t58.rng, base8.rng + 0.20 * 44, 1e-6) && approx(t58.critBonus, base8.critBonus + 0.10, 1e-9));
   const lvlDef = D.TOWERS_DATA[0];
   const fakeT = { defRef: lvlDef, level: 1, comp: { w: 0, e: 0, r: 0, t: 0 } };
   const stNv1 = DO.getTowerStats({ towers: [], mutBuffs: {}, combo: 0 }, Object.assign({}, fakeT, { level: 1 }));
@@ -1106,6 +1109,790 @@ console.log('\n[T15] F4-comp — buyComp atomico, mults, loja/painel/aneis');
     gameSrc.indexOf('reactor') >= 0 && gameSrc.indexOf('target') >= 0 && gameSrc.indexOf('_hi') >= 0);
   check('F4.22 anel supply: supplyRadius + .supply-ring + getResupply via API',
     typeof DO.getResupply === 'function' && gameSrc.indexOf('supply-ring') >= 0 && gameSrc.indexOf('supplyRadius') >= 0);
+})();
+
+/* ---------- T16 (REFUEL): pit stop — low-fuel → estação, reserva 30%, atraca ≥90%, fallback âncora ---------- */
+console.log('\n[T16] REFUEL — corrida ao pit stop');
+(function () {
+  function freshR() { const _S = DO.startNewGame(0, 'normal', false); _S.credits = 99999; _S.parts = 999; _S.autoMove = false; _S.enemies.length = 0; return _S; }
+  function airR(_S) {
+    for (let c = 3; c <= 14; c++) {
+      const r = 1; let ok = true;
+      for (let cc = c; cc <= c + 5; cc++) { const k = cc + ',' + r; if (_S.blocked[k] || _S.occupied[k]) { ok = false; break; } }
+      if (ok) return { c, r };
+    }
+    return null;
+  }
+  function farFree(_S, tx, ty, minD) {
+    for (let c = 0; c < 21; c++) for (let r = 0; r < 13; r++) {
+      const k = c + ',' + r;
+      if (_S.blocked[k] || _S.occupied[k]) continue;
+      if (Math.hypot(c * 44 + 22 - tx, r * 44 + 22 - ty) >= minD) return { c, r };
+    }
+    return null;
+  }
+  function nearFree(_S, tx, ty, maxD) {
+    for (let c = 0; c < 21; c++) for (let r = 0; r < 13; r++) {
+      const k = c + ',' + r;
+      if (_S.blocked[k] || _S.occupied[k]) continue;
+      const d = Math.hypot(c * 44 + 22 - tx, r * 44 + 22 - ty);
+      if (d <= maxD && d > 1) return { c, r };
+    }
+    return null;
+  }
+  function moveAway(_S, t, dc) {
+    const nc = t.ax + dc, nr = t.ay;
+    const k = nc + ',' + nr;
+    if (_S.blocked[k] || _S.occupied[k]) return false;
+    delete _S.occupied[t.c + ',' + t.r];
+    t.c = nc; t.r = nr; t.x = nc * 44 + 22; t.y = nr * 44 + 22;
+    _S.occupied[t.c + ',' + t.r] = t;
+    return true;
+  }
+  check('REFUEL.0 DO.nearestResupply exposto', typeof DO.nearestResupply === 'function');
+  // R0: nearest = mais próxima (support perto vs station longe) + null sem fontes
+  (function () {
+    const S0 = freshR();
+    const a0 = airR(S0); const t0 = DO.placeTower(S0, a0.c, a0.r, 'cannon');
+    const fFar = farFree(S0, t0.x, t0.y, 300);
+    const stFar = DO.placeTower(S0, fFar.c, fFar.r, 'station');
+    const nNear = nearFree(S0, t0.x, t0.y, 90);
+    const supNear = DO.placeTower(S0, nNear.c, nNear.r, 'support');
+    const nr = DO.nearestResupply(S0, t0);
+    const dSt = Math.hypot(stFar.x - t0.x, stFar.y - t0.y);
+    const dSu = Math.hypot(supNear.x - t0.x, supNear.y - t0.y);
+    check('REFUEL.1 nearest = fonte viável MAIS PRÓXIMA', !!nr && nr === supNear && dSu < dSt, 'dSup=' + Math.round(dSu) + ' dSt=' + Math.round(dSt));
+    const S0b = freshR();
+    const a0b = airR(S0b); const t0b = DO.placeTower(S0b, a0b.c, a0b.r, 'cannon');
+    check('REFUEL.2 sem station/support → nearest null', DO.nearestResupply(S0b, t0b) === null);
+  })();
+  // R1: low-fuel 24% (<25%) mira a estação (qualquer distância, ignora leash)
+  (function () {
+    const S1 = freshR();
+    const a1 = airR(S1); const t1 = DO.placeTower(S1, a1.c, a1.r, 'cannon');
+    DO.setStance(S1, t1, 'pursue');
+    moveAway(S1, t1, 2);
+    const fc = farFree(S1, t1.x, t1.y, 300);
+    const st1 = DO.placeTower(S1, fc.c, fc.r, 'station');
+    t1.fuel = 24; t1._warnCd = 0; S1.events.length = 0; S1.enemies.length = 0;
+    DO.stepSim(S1, 0.05);
+    check('REFUEL.3 fuel<25% com estação → refuel=true (não volta à âncora)', t1.refuel === true && t1.returning === false, 'refuel=' + t1.refuel + ' ret=' + t1.returning);
+    check('REFUEL.4 mira a estação mais próxima', DO.nearestResupply(S1, t1) === st1);
+    const dBefore = Math.hypot(st1.x - t1.x, st1.y - t1.y);
+    for (let i = 0; i < 20; i++) DO.stepSim(S1, 0.1);
+    const dAfter = Math.hypot(st1.x - t1.x, st1.y - t1.y);
+    check('REFUEL.5 voa até a estação (dist diminui, ignora leash)', dAfter < dBefore, Math.round(dBefore) + '->' + Math.round(dAfter));
+  })();
+  // R2: reserva de emergência — move com fuel 0 a 30% (nunca trava)
+  (function () {
+    const S2 = freshR();
+    const a2 = airR(S2); const t2 = DO.placeTower(S2, a2.c, a2.r, 'cannon');
+    DO.setStance(S2, t2, 'pursue');
+    moveAway(S2, t2, 2);
+    const fc2 = farFree(S2, t2.x, t2.y, 300);
+    DO.placeTower(S2, fc2.c, fc2.r, 'station');
+    t2.fuel = 0; t2._warnCd = 0; S2.events.length = 0; S2.enemies.length = 0;
+    DO.stepSim(S2, 0.05);
+    const c0 = t2.c, r0 = t2.r;
+    for (let i = 0; i < 70; i++) DO.stepSim(S2, 0.1);
+    const moved = Math.abs(t2.c - c0) + Math.abs(t2.r - r0);
+    check('REFUEL.6 reserva move com fuel 0 (rasteja 30%, ≥1 célula em 7s)', moved >= 1 && t2.refuel === true && t2.fuel >= 0, 'moved=' + moved + ' fuel=' + t2.fuel);
+  })();
+  // R3: atraca dentro do supplyRadius e sai com ≥90% + floats 1x cada
+  (function () {
+    const S3 = freshR();
+    const a3 = airR(S3); const t3 = DO.placeTower(S3, a3.c, a3.r, 'cannon');
+    DO.setStance(S3, t3, 'pursue');
+    moveAway(S3, t3, 2);
+    const adj = nearFree(S3, t3.x, t3.y, 90);
+    const st3 = DO.placeTower(S3, adj.c, adj.r, 'station');
+    const d0 = Math.hypot(st3.x - t3.x, st3.y - t3.y);
+    const d0Sq = Math.max(Math.abs(st3.c - t3.c), Math.abs(st3.r - t3.r));
+    t3.fuel = 10; t3._warnCd = 0; S3.events.length = 0; S3.enemies.length = 0;
+    for (let i = 0; i < 5; i++) DO.stepSim(S3, 0.1);
+    const cDock0 = t3.c, rDock0 = t3.r;
+    const dockFloats = S3.events.filter(e => e.t === 'float' && e.txt === '⛽ REABASTECENDO').length;
+    // RANGESQ: atraque em supplySq 4□=176px (antes supplyRadius 170px). Justificativa: contrato supplySq.
+    check('REFUEL.7 RANGESQ atraca no supplySq 4□ (para + 1x REABASTECENDO)', d0Sq <= D.STATION_DATA.supplySq + 1e-9 && d0 <= D.STATION_DATA.supplySq * 44 + 1e-9 && t3.refuel === true && dockFloats === 1, 'dSq=' + d0Sq + ' d=' + Math.round(d0) + ' floats=' + dockFloats);
+    const stayed = (function () {
+      for (let i = 0; i < 5; i++) DO.stepSim(S3, 0.1);
+      return t3.c === cDock0 && t3.r === rDock0;
+    })();
+    check('REFUEL.8 atracada fica parada recarregando', stayed, 'c=' + t3.c + ',' + t3.r);
+    for (let i = 0; i < 200 && !(t3.refuel === false); i++) DO.stepSim(S3, 0.1);
+    const fullFloats = S3.events.filter(e => e.t === 'float' && e.txt === '✔ TANQUE CHEIO').length;
+    const dockFloats2 = S3.events.filter(e => e.t === 'float' && e.txt === '⛽ REABASTECENDO').length;
+    check('REFUEL.9 sai com fuel≥90% + 1x TANQUE CHEIO e volta à âncora', t3.fuel >= 90 && t3.refuel === false && fullFloats === 1 && dockFloats2 === 1 && t3.returning === true,
+      'fuel=' + Math.round(t3.fuel) + ' refuel=' + t3.refuel + ' ret=' + t3.returning + ' full=' + fullFloats);
+  })();
+  // R4: sem estação → fallback âncora (idêntico ao F3)
+  (function () {
+    const S4 = freshR();
+    const a4 = airR(S4); const t4 = DO.placeTower(S4, a4.c, a4.r, 'cannon');
+    DO.setStance(S4, t4, 'pursue');
+    moveAway(S4, t4, 2);
+    t4.fuel = 10; t4._warnCd = 0; S4.events.length = 0; S4.enemies.length = 0;
+    DO.stepSim(S4, 0.05);
+    const dHomeBefore = Math.hypot(t4.ax * 44 + 22 - t4.x, t4.ay * 44 + 22 - t4.y);
+    for (let i = 0; i < 20; i++) DO.stepSim(S4, 0.1);
+    const dHomeAfter = Math.hypot(t4.ax * 44 + 22 - t4.x, t4.ay * 44 + 22 - t4.y);
+    check('REFUEL.10 sem fontes → fallback âncora (refuel false, returning, dist âncora diminui)',
+      !t4.refuel && (t4.returning === true || dHomeAfter < dHomeBefore), 'refuel=' + t4.refuel + ' ret=' + t4.returning);
+  })();
+  // R5: sem deadlock em 500 steps (refuel longe + fuel baixo)
+  (function () {
+    const S5 = freshR();
+    const a5 = airR(S5); const t5 = DO.placeTower(S5, a5.c, a5.r, 'cannon');
+    DO.setStance(S5, t5, 'pursue');
+    moveAway(S5, t5, 2);
+    const fc5 = farFree(S5, t5.x, t5.y, 300);
+    DO.placeTower(S5, fc5.c, fc5.r, 'station');
+    t5.fuel = 5; S5.enemies.length = 0;
+    const nTowers = S5.towers.length;
+    let ok = true;
+    try {
+      for (let i = 0; i < 500; i++) DO.stepSim(S5, 0.1);
+    } catch (_) { ok = false; }
+    const valid = t5.c >= 0 && t5.c < 21 && t5.r >= 0 && t5.r < 13 && t5.fuel >= 0 && t5.fuel <= DO.getMaxFuel(t5) + 1e-6;
+    check('REFUEL.11 500 steps sem deadlock/trava', ok && valid && S5.towers.length === nTowers && S5.time > 40, 'time=' + S5.time.toFixed(1) + ' c=' + t5.c + ',' + t5.r);
+  })();
+})();
+
+/* ---------- T17 (RANGESQ): range em quadrados Chebyshev + nerf ---------- */
+console.log('\n[T17] RANGESQ — mira/leash/supply em □, splash/chain convertidos');
+(function () {
+  function mkE(_S, cx, cy, flying) {
+    const def = D.ENEMIES_DATA.drone;
+    const e = { eid: ++_S.spawnCounter + 9000, type: 'drone', type_key: 'drone', defRef: def, label: def.label, col: def.col, r: def.r, shape: def.shape,
+      hp: 9999, maxHp: 9999, shield: 0, maxShield: 0, dist: 10, totalLen: 9999, progress: 0.5, routeIdx: 0, flying: !!flying,
+      x: cx * 44 + 22, y: cy * 44 + 22, dirAngle: 0, speed: 10, armor: 0, slowTimer: 0, slowFactor: 1, stunTimer: 0, cryoVuln: 0,
+      poisonTimer: 0, poisonDps: 0, poisonBy: null, burnTimer: 0, burnDps: 0, markedTimer: 0,
+      healCooldown: 0, stealthPhase: 0, raged: false, flash: 0, dead: false, leaked: false };
+    _S.enemies.push(e); return e;
+  }
+  function mkT(_S, cx, cy, id) {
+    const def = D.TOWERS_DATA.find(d => d.id === id);
+    const t = { tid: 90000 + Math.floor(Math.random() * 8999), defRef: def, level: 1, c: cx, r: cy, x: cx * 44 + 22, y: cy * 44 + 22,
+      targetMode: 'FIRST', specBranch: null, cooldown: 0, recoil: 0, flash: 0, rampTime: 0, lastTargetEid: null, angle: 0, aimAngle: 0,
+      comp: { w: 0, e: 0, r: 0, t: 0 }, stance: 'anchor', ax: cx, ay: cy, returning: false, fuel: 100, batt: 100, ammo: 40 };
+    return t;
+  }
+  // RANGESQ.1 tabela contrato
+  const expSq = { cannon: 3, gatling: 2, laser: 3, missile: 3, cryo: 2, tesla: 2, sniper: 5, venom: 3, amp: 3, rail: 4 };
+  let tabOk = true, tabInfo = '';
+  for (const id in expSq) {
+    const def = D.TOWERS_DATA.find(d => d.id === id);
+    if (!def || def.rngSq !== expSq[id]) { tabOk = false; tabInfo = id + '=' + (def && def.rngSq); break; }
+  }
+  if (D.STATION_DATA.supplySq !== 4 || D.SUPPORT_DATA.supplySq !== 2) { tabOk = false; tabInfo = 'supplySq'; }
+  check('RANGESQ.1 tabela rngSq contrato (cannon3 gatling2 laser3 missile3 cryo2 tesla2 sniper5 venom3 amp3 rail4 station4□ support2□)', tabOk, tabInfo);
+  // RANGESQ.2 stats.rng px = rngSqEff×CELL p/ render/projeteis
+  const SQ2 = DO.startNewGame(0, 'normal', false);
+  const cDef = D.TOWERS_DATA.find(d => d.id === 'cannon');
+  const cT = mkT(SQ2, 10, 6, 'cannon');
+  const cSt = DO.getTowerStats(SQ2, cT);
+  check('RANGESQ.2 getTowerStats().rng px = rngSqEff×CELL (cannon 3□=132px legado 120px mantido)', approx(cSt.rng, cSt.rngSqEff * 44, 1e-6) && approx(cSt.rng, 132, 1e-6) && cDef.rng === 120, 'rng=' + cSt.rng + ' sq=' + cSt.rngSqEff);
+  // RANGESQ.3 diagonal conta 1□ (3,3) dentro de 3□; euclidiana 186px >132px estaria fora no px
+  const SQ3 = DO.startNewGame(0, 'normal', false);
+  const t33 = mkT(SQ3, 10, 6, 'cannon');
+  const st33 = DO.getTowerStats(SQ3, t33);
+  SQ3.enemies.length = 0;
+  const eDiag = mkE(SQ3, 13, 9, false); // dc=3,dr=3 → Chebyshev 3
+  const eDiagPx = Math.hypot(eDiag.x - t33.x, eDiag.y - t33.y);
+  check('RANGESQ.3 diagonal (3,3) conta 3□ e mira (euclidiana ' + Math.round(eDiagPx) + 'px >132px seria miss no px)', DO.findBestTarget(SQ3, t33, st33) === eDiag, 'px=' + Math.round(eDiagPx));
+  // RANGESQ.4 fora de N□ não mira (4,0) fora de 3□
+  SQ3.enemies.length = 0;
+  const eOut = mkE(SQ3, 14, 6, false); // dc=4
+  check('RANGESQ.4 fora de 3□ (4,0) não mira', DO.findBestTarget(SQ3, t33, st33) === null);
+  // RANGESQ.5 leash em squares 1.5×rngSq (laser 3□ → 4.5□)
+  const SQ5 = DO.startNewGame(0, 'normal', false);
+  const tL = mkT(SQ5, 10, 6, 'laser');
+  const stL = DO.getTowerStats(SQ5, tL);
+  const leashSqL = 1.5 * stL.rngSqEff;
+  check('RANGESQ.5 leash = 1.5×rngSq (laser 3□ → 4.5□)', approx(leashSqL, 4.5, 1e-9), 'leashSq=' + leashSqL);
+  // RANGESQ.6 splash/chain conversão ceil(px/44*2)/2 (65px→1.5□, 100px→2.5□)
+  const px2sq = px => Math.ceil(px / 44 * 2) / 2;
+  const mDef = D.TOWERS_DATA.find(d => d.id === 'missile');
+  const SQ6 = DO.startNewGame(0, 'normal', false);
+  const mT = mkT(SQ6, 10, 6, 'missile');
+  const mSt = DO.getTowerStats(SQ6, mT);
+  check('RANGESQ.6 splash 65px→1.5□ e chain 100px→2.5□ (ceil(px/CELL*2)/2)', px2sq(65) === 1.5 && px2sq(100) === 2.5 && approx(mSt.splashSq, 1.5, 1e-9), 'splashSq=' + mSt.splashSq);
+  // RANGESQ.7 textos N□ no painel/loja/tooltip
+  const gSrc = fs.readFileSync(path.join(ROOT, 'assets', 'game.js'), 'utf8');
+  check('RANGESQ.7 painel/loja/tooltip mostram N□ (game.js contém □)', gSrc.indexOf('□') >= 0 && gSrc.indexOf('ALCANCE') >= 0);
+  // RANGESQ.8 supply diagonal em □ (support 2□: (2,2) dentro; px 124>95 seria fora)
+  function findPair(_S, dx, dy) {
+    for (let c = 0; c + dx < 21; c++) for (let r = 0; r + dy < 13; r++) {
+      const k1 = c + ',' + r, k2 = (c + dx) + ',' + (r + dy);
+      if (!_S.blocked[k1] && !_S.occupied[k1] && !_S.blocked[k2] && !_S.occupied[k2]) return { c, r, c2: c + dx, r2: r + dy };
+    }
+    return null;
+  }
+  const SQ8 = DO.startNewGame(0, 'normal', false);
+  SQ8.credits = 99999; SQ8.parts = 999;
+  const pr = findPair(SQ8, 2, 2);
+  let supDiagOk = false, supDiagInfo = '';
+  if (pr) {
+    const tw = DO.placeTower(SQ8, pr.c, pr.r, 'cannon');
+    const su = DO.placeTower(SQ8, pr.c2, pr.r2, 'support');
+    if (tw && su) {
+      const rs = DO.getResupply(SQ8, tw);
+      const dPx = Math.hypot(su.x - tw.x, su.y - tw.y);
+      supDiagOk = rs.fuel > 0 && dPx > 95; // Chebyshev 2 ≤2□ dentro, mas px >95 fora do legado
+      supDiagInfo = 'dPx=' + Math.round(dPx) + ' fuel=' + rs.fuel;
+    } else supDiagInfo = 'place falhou';
+  } else supDiagInfo = 'sem par livre';
+  check('RANGESQ.8 support diagonal (2,2) supre em □ (px ' + '>95 seria miss no legado)', supDiagOk, supDiagInfo);
+  // RANGESQ.9 Mira soma fração (+0.04□/pip, não ×1.04)
+  const SQ9 = DO.startNewGame(0, 'normal', false);
+  SQ9.credits = 99999;
+  const q9c = (function(){ for (let c = 0; c < 21; c++) for (let r = 0; r < 13; r++) if (!SQ9.blocked[c + ',' + r]) return { c, r }; return null; })();
+  const q9t = DO.placeTower(SQ9, q9c.c, q9c.r, 'cannon');
+  const b9 = DO.getTowerStats(SQ9, Object.assign({}, q9t, { comp: { w: 0, e: 0, r: 0, t: 0 } }));
+  q9t.comp.t = 1;
+  const tt9 = DO.getTowerStats(SQ9, q9t);
+  check('RANGESQ.9 Mira t=1 soma +0.04□ (rngSqEff+0.04, não ×1.04)', approx(tt9.rngSqEff, b9.rngSqEff + 0.04, 1e-9), 'base=' + b9.rngSqEff + ' t1=' + tt9.rngSqEff);
+})();
+
+/* ---------- T18: torre fantasma (pursue/refuel registram ocupação) ---------- */
+console.log('\n[T18] pursue/refuel mantêm S.occupied e permitem vender');
+(function(){
+  const Sp = DO.startNewGame(0, 'normal', false);
+  Sp.credits = 99999; Sp.parts = 999; Sp.autoMove = false;
+  let cell = null;
+  for (let c = 0; c < 16 && !cell; c++) for (let r = 0; r < 13; r++) {
+    const k = c + ',' + r;
+    if (!Sp.blocked[k] && !Sp.occupied[k]) { cell = { c, r }; break; }
+  }
+  const tp = DO.placeTower(Sp, cell.c, cell.r, 'cannon');
+  tp.stance = 'pursue'; tp.fuel = 100;
+  DO.spawnEnemy(Sp, 'drone');
+  const en = Sp.enemies[Sp.enemies.length - 1];
+  en.x = (tp.c + 2) * 44 + 22; en.y = tp.r * 44 + 22; en.speed = 0;
+  // determinismo: cannon nv1 não mira voador; força alvo terrestre se variante sorteada nasceu flying
+  if (en.defRef && en.defRef.flying) en.defRef = D.ENEMIES_DATA.drone;
+  en.flying = false;
+  for (let i = 0; i < 300; i++) DO.stepSim(Sp, 1 / 60);
+  check('T18.1 ocupação acompanha a torre em pursue', Sp.occupied[tp.c + ',' + tp.r] === tp, 'pos=' + tp.c + ',' + tp.r);
+  check('T18.2 torre viva é vendável', DO.sellTower(Sp, tp) === true);
+  check('T18.3 célula antiga fica livre', !Sp.occupied[cell.c + ',' + cell.r]);
+})();
+
+/* ---------- T19: míssil spec A/B e MIRV ---------- */
+console.log('\n[T19] dano de míssil (spec A ×1, splashAdd B, MIRV detona, cannon splA)');
+(function(){
+  const Sm = DO.startNewGame(0, 'normal', false);
+  Sm.credits = 99999; Sm.parts = 999; Sm.autoMove = false;
+  const cellM = { c: 3, r: 3 };
+  const tm = DO.placeTower(Sm, cellM.c, cellM.r, 'missile');
+  tm.specBranch = 'A';
+  const st = DO.getTowerStats(Sm, tm);
+  check('T19.1 spec A não multiplica de novo (dmg = stats.dmg)',
+    (function(){ DO.spawnEnemy(Sm, 'tank'); const e = Sm.enemies[Sm.enemies.length-1]; e.x = tm.x; e.y = tm.y + 10; DO.fireTower(Sm, tm, e, st); const pr = Sm.projectiles[Sm.projectiles.length-1]; return pr && Math.abs(pr.dmg - st.dmg) < 1e-6; })());
+  tm.specBranch = 'B';
+  const stB = DO.getTowerStats(Sm, tm);
+  check('T19.2 spec B soma splashAdd (65+40)', Math.abs(stB.splash - 105) < 1e-6, 'splash=' + stB.splash);
+
+  // T19.3: MIRV T5 — submunições herdam alvo vivo e detonam (contador de booms > salvas)
+  const Sw = DO.startNewGame(0, 'normal', false);
+  Sw.credits = 99999; Sw.parts = 999; Sw.autoMove = false;
+  const wc = nextFree(Sw);
+  const mw = DO.placeTower(Sw, wc.c, wc.r, 'missile');
+  mw.level = 41; mw.ammo = 40;
+  const stW = DO.getTowerStats(Sw, mw);
+  const ew = mkTarget(Sw, mw.x + 60, mw.y, 9999999);
+  ew.speed = 0; ew.flying = false; ew.routeIdx = 0;
+  ew.dist = 44; ew.totalLen = Sw.routeLengths[0]; // ponto (22,110) da rota 0
+  Sw.events.length = 0; Sw.projectiles.length = 0;
+  DO.fireTower(Sw, mw, ew, stW);
+  mw.cooldown = 1e9; // isola o MIRV: sem novos salvos da torre durante o loop
+  let guard = 0;
+  while (Sw.projectiles.length > 0 && guard++ < 900) DO.stepSim(Sw, 1 / 60);
+  const booms = Sw.events.filter(e2 => e2.t === 'boom').length;
+  check('T19.3 MIRV T5: submunições detonam (booms > salvas)', booms >= 6, 'booms=' + booms + ' guard=' + guard);
+
+  // T19.4: cannon spec A concussão em área atinge 2º inimigo
+  const Ss = DO.startNewGame(0, 'normal', false);
+  Ss.credits = 99999; Ss.autoMove = false;
+  const scc = nextFree(Ss);
+  const cs = DO.placeTower(Ss, scc.c, scc.r, 'cannon');
+  cs.specBranch = 'A'; cs.ammo = 40;
+  const e1 = mkTarget(Ss, cs.x, cs.y + 88, 9999999);
+  const e2 = mkTarget(Ss, cs.x + 44, cs.y + 88, 9999999);
+  e1.speed = 0; e2.speed = 0; e1.flying = false; e2.flying = false;
+  e1.dist = 44; e2.dist = 88; e1.totalLen = Ss.routeLengths[0]; e2.totalLen = Ss.routeLengths[0];
+  Ss.projectiles.length = 0;
+  for (let i = 0; i < 120 && e2.hp === 9999999; i++) DO.stepSim(Ss, 1 / 60);
+  check('T19.4 cannon spec A concussão atinge 2 inimigos',
+    e1.hp < 9999999 && e2.hp < 9999999, 'e1=' + Math.round(e1.hp) + ' e2=' + Math.round(e2.hp));
+})();
+
+/* ---------- T20: wave multiplier, bosses, slowImmune, save, cryo B e mutações ---------- */
+console.log('\n[T20] regressões Onda 1 — wave mult, bosses, slowImmune, save, cryo B, mutações');
+(function(){
+  // T20.1: multiplicador de spawn por faixa de 10
+  check('T20.1 getWaveSpawnMultiplier 1.0/1.3/1.6',
+    typeof D.getWaveSpawnMultiplier === 'function' &&
+    D.getWaveSpawnMultiplier(1) === 1 && Math.abs(D.getWaveSpawnMultiplier(11) - 1.3) < 1e-9 && Math.abs(D.getWaveSpawnMultiplier(21) - 1.6) < 1e-9,
+    'm1=' + (typeof D.getWaveSpawnMultiplier === 'function' ? D.getWaveSpawnMultiplier(1) : 'n/a'));
+  // T20.2: consumo — onda 11 da campanha ganha +30% de spawns na fila
+  const SQ = DO.startNewGame(0, 'normal', false);
+  SQ.wave = 10; // startNextWave → 11
+  const qBase = D.parseWaveString(SQ.map.waves[10]).length;
+  DO.startNextWave(SQ);
+  check('T20.2 fila da onda 11 recebe +30% spawns',
+    SQ.wave === 11 && SQ.waveQueue.length === qBase + Math.round(qBase * 0.3),
+    'q=' + SQ.waveQueue.length + ' base=' + qBase);
+
+  // T20.3: múltiplos bosses — barra continua no outro chefe
+  const SB = DO.startNewGame(0, 'normal', false);
+  const b1 = DO.spawnEnemy(SB, 'boss1');
+  const b2 = DO.spawnEnemy(SB, 'boss2');
+  const bossBefore = SB.activeBoss === b2;
+  DO.killEnemy(SB, b1);
+  const bossMid = SB.activeBoss === b2;
+  DO.killEnemy(SB, b2);
+  check('T20.3 matar um boss mantém activeBoss no outro; sem vivos → null',
+    bossBefore && bossMid && SB.activeBoss === null,
+    'before=' + bossBefore + ' mid=' + bossMid + ' after=' + (SB.activeBoss && SB.activeBoss.eid));
+
+  // T20.4: colosso slowImmune — EMP não aplica slow, mas atordoa
+  const SE = DO.startNewGame(0, 'normal', false);
+  const ec0 = nextFree(SE);
+  const te0 = DO.placeTower(SE, ec0.c, ec0.r, 'tesla');
+  const col = DO.spawnEnemy(SE, 'colossus');
+  col.x = te0.x + 30; col.y = te0.y; col.slowTimer = 0; col.slowFactor = 1; col.stunTimer = 0;
+  DO.applySuper(SE, 'emp', te0.x, te0.y);
+  check('T20.4 colosso slowImmune: EMP não faz slow, mas atordoa',
+    col.slowTimer === 0 && col.slowFactor === 1 && col.stunTimer > 0 && !col.dead,
+    'slow=' + col.slowTimer + ' f=' + col.slowFactor + ' stun=' + col.stunTimer);
+
+  // T20.5: super da cryo também respeita slowImmune
+  const SE2 = DO.startNewGame(0, 'normal', false);
+  const ec2 = nextFree(SE2);
+  const cr2 = DO.placeTower(SE2, ec2.c, ec2.r, 'cryo');
+  const col2 = DO.spawnEnemy(SE2, 'colossus');
+  col2.x = cr2.x + 20; col2.y = cr2.y; col2.slowTimer = 0; col2.slowFactor = 1; col2.stunTimer = 0;
+  DO.forceSuperCharge(SE2, cr2);
+  check('T20.5 super da cryo não faz slow em slowImmune',
+    col2.slowTimer === 0 && col2.slowFactor === 1, 'slow=' + col2.slowTimer + ' f=' + col2.slowFactor);
+
+  // T20.6/7/8: save v3 tolerante a corrupção
+  const _prevSave = D.Save.data;
+  localStorageStub.setItem(D.SAVE_KEY, JSON.stringify({ v: 3, tech: null, mapStars: 'x', crystals: 'abc', achievements: 'nope', unlockedMap: 'z' }));
+  let loadThrew = false;
+  try { D.Save.load(); } catch (e) { loadThrew = true; }
+  check('T20.6 save corrompido não lança e devolve defaults normalizados',
+    !loadThrew && !!D.Save.data.tech && typeof D.Save.data.tech === 'object' && !Array.isArray(D.Save.data.tech) &&
+    Array.isArray(D.Save.data.mapStars) && D.Save.data.mapStars.length === 0 &&
+    D.Save.data.crystals === 30 && Array.isArray(D.Save.data.achievements) && D.Save.data.unlockedMap === 1,
+    'threw=' + loadThrew + ' tech=' + JSON.stringify(D.Save.data.tech) + ' crystals=' + D.Save.data.crystals);
+  check('T20.7 techLvl/livesMax sãos com save vazio', D.Save.techLevel('base_hp') === 0 &&
+    Number.isFinite(DO.startNewGame(0, 'normal', false).livesMax));
+  localStorageStub.setItem(D.SAVE_KEY, JSON.stringify({ v: 3, tech: { base_hp: 'x', start_gold: 3 }, crystals: 10 }));
+  D.Save.load();
+  check('T20.8 tech numérico/finito após load (base_hp inválido → 0)',
+    D.Save.techLevel('base_hp') === 0 && D.Save.techLevel('start_gold') === 3,
+    'base_hp=' + D.Save.techLevel('base_hp') + ' start_gold=' + D.Save.techLevel('start_gold'));
+  D.Save.data = _prevSave;
+
+  // T20.9: cryo B aura aplica slow sem gastar batt e sem tiro
+  const SA = DO.startNewGame(0, 'normal', false);
+  SA.credits = 99999; SA.autoMove = false;
+  const ac = nextFree(SA);
+  const aw = DO.placeTower(SA, ac.c, ac.r, 'cryo');
+  aw.specBranch = 'B'; aw.batt = 0;
+  const ea = mkTarget(SA, aw.x + 40, aw.y, 9999999);
+  ea.speed = 0; ea.flying = false; ea.dist = 0; ea.totalLen = SA.routeLengths[0];
+  SA.events.length = 0;
+  for (let i = 0; i < 60; i++) DO.stepSim(SA, 1 / 60);
+  const muzzles = SA.events.filter(e2 => e2.t === 'muzzle').length;
+  check('T20.9 cryo B aura: slow sem tiro e batt intacto (0)',
+    ea.slowTimer > 0 && ea.slowFactor <= 0.85 && aw.batt === 0 && muzzles === 0,
+    'slow=' + ea.slowTimer + ' f=' + ea.slowFactor + ' batt=' + aw.batt + ' mz=' + muzzles);
+
+  // T20.10: mut_cryo aumenta duração do pulso (+40%/stack)
+  const SM = DO.startNewGame(0, 'normal', false);
+  SM.credits = 99999; SM.autoMove = false;
+  const mc = nextFree(SM);
+  const mw2 = DO.placeTower(SM, mc.c, mc.r, 'cryo');
+  mw2.batt = 100;
+  const em = mkTarget(SM, mw2.x + 40, mw2.y, 9999999);
+  em.flying = false;
+  const stM = DO.getTowerStats(SM, mw2);
+  DO.fireTower(SM, mw2, em, stM);
+  const baseSlow = em.slowTimer;
+  em.slowTimer = 0; em.slowFactor = 1;
+  SM.mutBuffs.cryo = 1;
+  DO.fireTower(SM, mw2, em, stM);
+  check('T20.10 mut_cryo: 2.2s → 3.08s (+40%)', Math.abs(baseSlow - 2.2) < 1e-9 && Math.abs(em.slowTimer - 3.08) < 1e-6,
+    'base=' + baseSlow + ' mut=' + em.slowTimer);
+
+  // T20.11: mut_poison +45% duração e +1 alvo extra fora da névoa
+  const SV = DO.startNewGame(0, 'normal', false);
+  SV.credits = 99999; SV.autoMove = false;
+  const vc = nextFree(SV);
+  const vw = DO.placeTower(SV, vc.c, vc.r, 'venom');
+  vw.batt = 100;
+  const v1 = mkTarget(SV, vw.x + 30, vw.y, 9999999);
+  const v2 = mkTarget(SV, vw.x + 4 * 44, vw.y, 9999999);
+  const v3 = mkTarget(SV, vw.x + 9 * 44, vw.y, 9999999);
+  v1.flying = false; v2.flying = false; v3.flying = false;
+  SV.mutBuffs.poison = 1;
+  const stV = DO.getTowerStats(SV, vw);
+  DO.fireTower(SV, vw, v1, stV);
+  check('T20.11 mut_poison: 5.075s no alvo da névoa e +1 alvo extra',
+    Math.abs(v1.poisonTimer - 5.075) < 1e-6 && Math.abs(v2.poisonTimer - 5.075) < 1e-6 && v3.poisonTimer === 0,
+    'v1=' + v1.poisonTimer + ' v2=' + v2.poisonTimer + ' v3=' + v3.poisonTimer);
+
+  // T20.12 (Onda 2 fix): tutorialSeen sobrevive ao normalize e save corrompido não lança
+  check('T20.12 normalize preserva tutorialSeen=true (não reabre o tutorial)', D.Save.normalize({ v: 3, tutorialSeen: true }).tutorialSeen === true);
+  let normOk12 = true;
+  try { normOk12 = D.Save.normalize({ v: 3, tech: null, mapStars: 'x' }).tutorialSeen === false; } catch (e) { normOk12 = false; }
+  check("T20.12 normalize({v:3, tech:null, mapStars:'x'}) não lança e devolve defaults", normOk12);
+})();
+
+/* ---------- T21: Onda 2 — TIER_LOGIC verdadeiro + cache por frame ---------- */
+console.log('\n[T21] Onda 2 — efeitos reais por tier, cache de getTowerStats, marcas/veneno');
+(function(){
+  // rota reta sintética p/ geometria determinística (sem o teleporte da rota do mapa)
+  function flatRoute(S) {
+    S.blocked = {};
+    const y = 154; // centro da linha r=3
+    S.routes = [[{ x: 0, y: y }, { x: 924, y: y }]];
+    S.routeLengths = [924];
+    S.airPts = [{ x: -24, y: y }, { x: 948, y: y }];
+    S.airLen = 972;
+    return S;
+  }
+  function putTower(S, id, lvl, c, r) {
+    const t = DO.placeTower(S, c, r, id);
+    if (t) { t.level = lvl || 1; t.ammo = 9999; t.batt = 9999; t.fuel = 9999; }
+    return t;
+  }
+  function putEnemy(S, d, hp) {
+    const e = mkTarget(S, 0, 0, hp);
+    e.routeIdx = 0; e.dist = d; e.totalLen = S.routeLengths[0]; e.speed = 0;
+    const p = D.getPosAtDist(S.routes[0], d);
+    e.x = p.x; e.y = p.y;
+    return e;
+  }
+  function runProj(S, guard) {
+    let g = 0;
+    while (S.projectiles.length > 0 && g++ < (guard || 300)) DO.stepSim(S, 1 / 60);
+    return g;
+  }
+
+  // T21.1-4: cache por frame de getTowerStats
+  const Sc = flatRoute(freshFunded());
+  const ct = putTower(Sc, 'cannon', 1, 5, 3);
+  const cs1 = DO.getTowerStats(Sc, ct);
+  const cs2 = DO.getTowerStats(Sc, ct);
+  check('T21.1 cache: duas chamadas devolvem o mesmo objeto', cs1 === cs2);
+  ct.level = 21;
+  const cs3 = DO.getTowerStats(Sc, ct);
+  const fresh3 = DO.getTowerStats(Sc, Object.assign({}, ct, { _statsCache: null }));
+  check('T21.2 cache invalida em level++ e bate com cálculo fresco',
+    cs3 !== cs1 && approx(cs3.dmg, fresh3.dmg, 1e-9) && approx(cs3.rate, fresh3.rate, 1e-9),
+    'cached=' + cs3.dmg + ' fresh=' + fresh3.dmg);
+  ct.specBranch = 'A';
+  const csA = DO.getTowerStats(Sc, ct);
+  check('T21.3 cache invalida em troca de spec', csA !== cs3 && approx(csA.dmg, cs3.dmg * 2.2, 1e-6), 'A=' + csA.dmg + ' base=' + cs3.dmg);
+  const ct2 = putTower(Sc, 'cannon', 1, 10, 3);
+  const beforeAmp = DO.getTowerStats(Sc, ct2);
+  putTower(Sc, 'amp', 1, 11, 3);
+  const afterAmp = DO.getTowerStats(Sc, ct2);
+  check('T21.4 cache invalida ao colocar amp (ampVersion)', afterAmp !== beforeAmp && afterAmp.dmg > beforeAmp.dmg,
+    'dmg ' + beforeAmp.dmg + '->' + afterAmp.dmg);
+
+  // T21.5-6: cannon T4 ricochete (e não vaza p/ T3)
+  const Sr = flatRoute(freshFunded());
+  const rt = putTower(Sr, 'cannon', 31, 5, 3);
+  const r1 = putEnemy(Sr, 272, 9999999);
+  const r2 = putEnemy(Sr, 300, 9999999);
+  const r2hp = r2.hp;
+  Sr.projectiles.length = 0;
+  // isola o ricochete: zera o pierce de skill (nv16) p/ o projétil morrer no 1º impacto
+  const stR = Object.assign({}, DO.getTowerStats(Sr, rt), { pierceBonus: 0 });
+  DO.fireTower(Sr, rt, r1, stR);
+  rt.cooldown = 1e9; // isola o volley: sem auto-tiro durante a simulação
+  runProj(Sr);
+  check('T21.5 cannon T4 ricochete: 2º inimigo a ≤1.5□ leva 50% do dano',
+    (r2.hp < r2hp || r2.dead) && r1.hp < 9999999, 'danos r1=' + Math.round(9999999 - r1.hp) + ' r2=' + Math.round(r2hp - r2.hp));
+  const Snl = flatRoute(freshFunded());
+  const nt = putTower(Snl, 'cannon', 21, 5, 3);
+  const n1 = putEnemy(Snl, 272, 9999999);
+  const n2 = putEnemy(Snl, 300, 9999999);
+  const n2hp = n2.hp;
+  Snl.projectiles.length = 0;
+  const stN = Object.assign({}, DO.getTowerStats(Snl, nt), { pierceBonus: 0 }); // isola: sem ricochete e sem pierce
+  DO.fireTower(Snl, nt, n1, stN);
+  nt.cooldown = 1e9; // isola o volley: sem auto-tiro durante a simulação
+  runProj(Snl);
+  check('T21.6 ricochete não vaza p/ cannon T3 (2º alvo intacto)',
+    n1.hp < 9999999 && n2.hp === n2hp, 'n1=' + Math.round(9999999 - n1.hp) + ' n2=' + (n2hp - n2.hp));
+
+  // T21.7: cannon T5 killDmg (stacks por abate, cap +50%)
+  const Sk = flatRoute(freshFunded());
+  const kt = putTower(Sk, 'cannon', 41, 5, 3);
+  const k0 = DO.getTowerStats(Sk, kt);
+  for (let i = 0; i < 3; i++) { const e = putEnemy(Sk, 272 + i, 10); DO.damageEnemy(Sk, e, 1e9, { src: kt }); }
+  const stacks3 = kt.killStacks | 0;
+  Sk.combo = 0; // isola o bônus de combo do cálculo de abate
+  const k3 = DO.getTowerStats(Sk, kt);
+  kt.killStacks = 100;
+  const kCap = DO.getTowerStats(Sk, kt);
+  check('T21.7 cannon T5 killDmg: +1%/abate (3 abates) e cap +50%',
+    stacks3 === 3 && approx(k3.dmg, k0.dmg * 1.03, 1e-6) && approx(kCap.dmg, k0.dmg * 1.5, 1e-6),
+    'stacks=' + stacks3 + ' 3abates=' + k3.dmg + ' cap=' + kCap.dmg + ' base=' + k0.dmg);
+
+  // T21.8: gatling T3 stunChance (RNG forçado p/ 0)
+  const Sg = flatRoute(freshFunded());
+  const gt = putTower(Sg, 'gatling', 21, 5, 3);
+  const ge = putEnemy(Sg, 272, 9999999);
+  const _rnd0 = Math.random;
+  Math.random = function(){ return 0; };
+  Sg.projectiles.length = 0;
+  DO.fireTower(Sg, gt, ge, DO.getTowerStats(Sg, gt));
+  runProj(Sg);
+  Math.random = _rnd0;
+  check('T21.8 gatling T3 stunChance 12%: atordoa 0.25s', ge.stunTimer > 0 && ge.stunTimer <= 0.25 + 1e-9, 'stun=' + ge.stunTimer);
+
+  // T21.9 (fix pós-review): laser T2 vsBurn pelo CAMINHO REAL do beam (stepSim)
+  const Sl = flatRoute(freshFunded());
+  const lt = putTower(Sl, 'laser', 11, 5, 3);
+  const le1 = putEnemy(Sl, 272, 9999999); le1.burnTimer = 1;
+  const Slb = flatRoute(freshFunded());
+  const ltb = putTower(Slb, 'laser', 11, 5, 3);
+  const le2 = putEnemy(Slb, 272, 9999999);
+  const h1 = le1.hp, h2 = le2.hp;
+  for (let i = 0; i < 30; i++) { DO.stepSim(Sl, 1 / 60); DO.stepSim(Slb, 1 / 60); }
+  const dmgBurn = h1 - le1.hp, dmgNorm = h2 - le2.hp;
+  check('T21.9 laser T2 vsBurn (beam real): +25% em alvo em chamas',
+    dmgNorm > 0 && approx(dmgBurn, dmgNorm * 1.25, 1e-6), 'burn=' + dmgBurn + ' normal=' + dmgNorm);
+
+  // T21.10 (fix pós-review): laser T4 shieldPhase pelo CAMINHO REAL do beam (stepSim)
+  const Sl4 = flatRoute(freshFunded());
+  const l4 = putTower(Sl4, 'laser', 31, 5, 3);
+  const se = putEnemy(Sl4, 272, 9999999); se.shield = 1e9; se.maxShield = 1e9;
+  const seHp = se.hp, seSh = se.shield;
+  for (let i = 0; i < 30; i++) DO.stepSim(Sl4, 1 / 60);
+  const seHpLost = seHp - se.hp, seShLost = seSh - se.shield;
+  check('T21.10 laser T4 shieldPhase (beam real): 50% atravessa o escudo',
+    seHpLost > 0 && seShLost > 0 && approx(seHpLost, seShLost, 1e-3), 'hp=' + seHpLost + ' sh=' + seShLost);
+  const Scn = flatRoute(freshFunded());
+  const cn = putTower(Scn, 'cannon', 1, 5, 3);
+  const ce = putEnemy(Scn, 272, 9999999); ce.shield = 100; ce.maxShield = 100;
+  const ceHp = ce.hp;
+  DO.damageEnemy(Scn, ce, 100, { src: cn });
+  check('T21.11 shieldPhase não vaza p/ cannon: escudo absorve tudo',
+    ce.shield === 0 && ce.hp === ceHp, 'hp=' + (ceHp - ce.hp) + ' sh=' + ce.shield);
+
+  // T21.12-13: tesla T2 ionSlow e T4 vsShield
+  const St = flatRoute(freshFunded());
+  const tt2 = putTower(St, 'tesla', 11, 5, 3);
+  const te = putEnemy(St, 272, 9999999);
+  DO.fireTower(St, tt2, te, DO.getTowerStats(St, tt2));
+  check('T21.12 tesla T2 ionSlow: 12% de lentidão por 1.5s',
+    te.slowTimer >= 1.5 - 1e-9 && approx(te.slowFactor, 0.88, 1e-9), 'slow=' + te.slowTimer + ' f=' + te.slowFactor);
+  const St4 = flatRoute(freshFunded());
+  const tt4 = putTower(St4, 'tesla', 31, 5, 3);
+  const ts = putEnemy(St4, 272, 9999999); ts.shield = 100; ts.maxShield = 100;
+  const tsHp = ts.hp;
+  DO.damageEnemy(St4, ts, 100, { src: tt4 });
+  check('T21.13 tesla T4 vsShield 1.6: 160 no escudo (60 vaza p/ HP)',
+    approx(tsHp - ts.hp, 60, 1e-6) && ts.shield === 0, 'hp=' + (tsHp - ts.hp) + ' sh=' + ts.shield);
+
+  // T21.14-17: sniper T2 mark / T3 ignoreArmor / T5 exec
+  const Ss = flatRoute(freshFunded());
+  const sn2 = putTower(Ss, 'sniper', 11, 5, 3);
+  const sm = putEnemy(Ss, 272, 9999999);
+  DO.fireTower(Ss, sn2, sm, DO.getTowerStats(Ss, sn2));
+  check('T21.14 sniper T2 mark: marca 1.5s com +15%', sm.markedTimer > 0 && approx(sm.markMul, 1.15, 1e-9), 'mk=' + sm.markedTimer + ' mul=' + sm.markMul);
+  const smh = sm.hp;
+  DO.damageEnemy(Ss, sm, 100, {});
+  check('T21.15 marca T2 vale 1.15 (não 1.35)', approx(smh - sm.hp, 115, 1e-6), 'dano=' + (smh - sm.hp));
+  const Ss3 = flatRoute(freshFunded());
+  const sn3 = putTower(Ss3, 'sniper', 21, 5, 3);
+  const sa = putEnemy(Ss3, 272, 9999999); sa.armor = 10;
+  const sb2 = putEnemy(Ss3, 300, 9999999); sb2.armor = 10;
+  const ha = sa.hp, hb = sb2.hp;
+  DO.damageEnemy(Ss3, sa, 100, { src: sn3 });
+  const cn3 = putTower(Ss3, 'cannon', 21, 10, 3);
+  DO.damageEnemy(Ss3, sb2, 100, { src: cn3 });
+  check('T21.16 sniper T3 ignoreArmor: 100 vs armor 10 (cannon T3 só perfura 4 → 94)',
+    approx(ha - sa.hp, 100, 1e-6) && approx(hb - sb2.hp, 94, 1e-6), 'sniper=' + (ha - sa.hp) + ' cannon=' + (hb - sb2.hp));
+  const Ss5 = flatRoute(freshFunded());
+  const sn5 = putTower(Ss5, 'sniper', 41, 5, 3);
+  const se5 = putEnemy(Ss5, 272, 1000);
+  se5.hp = 200; // 20% < 25%
+  DO.fireTower(Ss5, sn5, se5, DO.getTowerStats(Ss5, sn5));
+  check('T21.17 sniper T5 execAdd: executa alvo <25% HP', se5.dead === true, 'hp=' + se5.hp + ' dead=' + se5.dead);
+
+  // T21.18-20: venom T2 corrode / T4 pctPoison / T5 deathCloud
+  const Sv = flatRoute(freshFunded());
+  const vn2 = putTower(Sv, 'venom', 11, 5, 3);
+  const ve = putEnemy(Sv, 272, 1000); ve.armor = 5;
+  DO.fireTower(Sv, vn2, ve, DO.getTowerStats(Sv, vn2));
+  check('T21.18 venom T2 corrode: -1 armor por aplicação', ve.armor === 4, 'armor=' + ve.armor);
+  const Sv4 = flatRoute(freshFunded());
+  const vn4 = putTower(Sv4, 'venom', 31, 5, 3);
+  const ve4 = putEnemy(Sv4, 272, 1000);
+  const stv4 = DO.getTowerStats(Sv4, vn4);
+  DO.fireTower(Sv4, vn4, ve4, stv4);
+  check('T21.19 venom T4 pctPoison: dps += 0.6% da vida máx.',
+    approx(ve4.poisonDps, stv4.dmg + 0.006 * ve4.maxHp, 1e-6), 'dps=' + ve4.poisonDps + ' base=' + stv4.dmg);
+  const Sv5 = flatRoute(freshFunded());
+  const vn5 = putTower(Sv5, 'venom', 41, 5, 3);
+  const vc1 = putEnemy(Sv5, 272, 1000);
+  const vc2 = putEnemy(Sv5, 300, 9999999);
+  DO.fireTower(Sv5, vn5, vc1, DO.getTowerStats(Sv5, vn5));
+  const vc2hp = vc2.hp;
+  DO.damageEnemy(Sv5, vc1, 1e9, { src: vn5 });
+  check('T21.20 venom T5 deathCloud: morte envenenada explode em 2□', vc2.hp < vc2hp, 'dano no vizinho=' + (vc2hp - vc2.hp));
+
+  // T21.21-24: cryo T4 coldAura / T5 bossFreeze / laser T3 sweepAdd / T5 meltArmor
+  const Sc4 = flatRoute(freshFunded());
+  const cr4 = putTower(Sc4, 'cryo', 31, 5, 3);
+  cr4.batt = 0; // sem tiro: prova que a aura é passiva
+  const ca = putEnemy(Sc4, 272, 9999999);
+  Sc4.events.length = 0;
+  for (let i = 0; i < 40; i++) DO.stepSim(Sc4, 1 / 60);
+  const muzzles4 = Sc4.events.filter(x => x.t === 'muzzle').length;
+  check('T21.21 cryo T4 coldAura: slow 15% passivo sem tiro',
+    ca.slowTimer > 0 && approx(ca.slowFactor, 0.85, 1e-9) && muzzles4 === 0 && cr4.batt === 0,
+    'f=' + ca.slowFactor + ' mz=' + muzzles4);
+  const Sc5 = flatRoute(freshFunded());
+  const cr5 = putTower(Sc5, 'cryo', 41, 5, 3);
+  const bo = DO.spawnEnemy(Sc5, 'boss1');
+  bo.routeIdx = 0; bo.dist = 272; bo.totalLen = Sc5.routeLengths[0]; bo.speed = 0;
+  const bop = D.getPosAtDist(Sc5.routes[0], 272); bo.x = bop.x; bo.y = bop.y; bo.stunTimer = 0;
+  const _rnd1 = Math.random;
+  Math.random = function(){ return 0; };
+  const stBoss = Object.assign({}, DO.getTowerStats(Sc5, cr5), { stunBonus: 0 }); // isola do stun de skill nv28
+  DO.fireTower(Sc5, cr5, bo, stBoss);
+  Math.random = _rnd1;
+  check('T21.22 cryo T5 bossFreeze: chefe congela 0.4s (0.8×0.5)',
+    bo.stunTimer > 0 && bo.stunTimer <= 0.4 + 1e-9, 'stun=' + bo.stunTimer);
+  const Sl3 = flatRoute(freshFunded());
+  const l3 = putTower(Sl3, 'laser', 21, 5, 3);
+  const la = putEnemy(Sl3, 272, 9999999);
+  const lb = putEnemy(Sl3, 288, 9999999);
+  const lc = putEnemy(Sl3, 304, 9999999);
+  const lahp = la.hp, lbhp = lb.hp, lchp = lc.hp;
+  for (let i = 0; i < 30; i++) DO.stepSim(Sl3, 1 / 60);
+  const swept = (la.hp < lahp ? 1 : 0) + (lb.hp < lbhp ? 1 : 0) + (lc.hp < lchp ? 1 : 0);
+  const tblSweep = D.SHOT_PATTERNS.laser.sweep[2] || 0; // linha de base T3 = 1 extra
+  check('T21.23 laser T3 sweepAdd: varre ' + tblSweep + ' extra(s) da tabela, sem empilhar',
+    swept === 1 + tblSweep, 'alvos=' + swept + ' tabela=' + tblSweep);
+  const Sl5 = flatRoute(freshFunded());
+  const l5 = putTower(Sl5, 'laser', 41, 5, 3);
+  const melt = putEnemy(Sl5, 272, 9999999); melt.armor = 4;
+  for (let i = 0; i < 75; i++) DO.stepSim(Sl5, 1 / 60);
+  check('T21.24 laser T5 meltArmor: corrói 1 armor/s (4→≤3 em 1.25s)', melt.armor <= 3 && melt.armor >= 0, 'armor=' + melt.armor);
+
+  // T21.25-28: missile T3 fragAdd / T4 hitAir, tesla T5 globalChain, rail T4/T5 já consumidos
+  const Sm3 = flatRoute(freshFunded());
+  const ms3 = putTower(Sm3, 'missile', 21, 5, 3);
+  const mt1 = putEnemy(Sm3, 272, 9999999);
+  const mt2 = putEnemy(Sm3, 392, 9999999);
+  const mt2hp = mt2.hp;
+  DO.fireTower(Sm3, ms3, mt1, DO.getTowerStats(Sm3, ms3));
+  runProj(Sm3, 600);
+  check('T21.25 missile T3 fragAdd: fragmento extra fere alvo fora do splash',
+    mt2.hp < mt2hp, 'dano=' + Math.round(mt2hp - mt2.hp));
+  const Sm4 = flatRoute(freshFunded());
+  const ms4 = putTower(Sm4, 'missile', 31, 5, 3);
+  check('T21.26 missile T4 hitAir: canHitAir true', DO.getTowerStats(Sm4, ms4).canHitAir === true);
+  const St5 = flatRoute(freshFunded());
+  const ts5 = putTower(St5, 'tesla', 41, 5, 3);
+  const g1 = putEnemy(St5, 272, 9999999);
+  const g2 = putEnemy(St5, 800, 9999999);
+  const g2hp = g2.hp;
+  DO.fireTower(St5, ts5, g1, DO.getTowerStats(St5, ts5));
+  check('T21.27 tesla T5 globalChain: salto ignora distância (>2.5□)', g2.hp < g2hp, 'dano=' + Math.round(g2hp - g2.hp));
+  const Sra = flatRoute(freshFunded());
+  const ra4 = putTower(Sra, 'rail', 31, 5, 3);
+  const ra5 = putTower(Sra, 'rail', 41, 10, 3);
+  const rae = putEnemy(Sra, 272, 9999999);
+  Sra.events.length = 0;
+  DO.fireTower(Sra, ra4, rae, DO.getTowerStats(Sra, ra4));
+  const tr4 = Sra.events.filter(x => x.t === 'tracer').pop();
+  Sra.events.length = 0;
+  DO.fireTower(Sra, ra5, rae, DO.getTowerStats(Sra, ra5));
+  const tr5 = Sra.events.filter(x => x.t === 'tracer').pop();
+  const len4 = tr4 ? Math.hypot(tr4.x2 - tr4.x1, tr4.y2 - tr4.y1) : 0;
+  const len5 = tr5 ? Math.hypot(tr5.x2 - tr5.x1, tr5.y2 - tr5.y1) : 0;
+  check('T21.28 rail T4 fullBase / T5 starLine já consumidos',
+    len4 >= 900 && len5 > len4, 'len4=' + Math.round(len4) + ' len5=' + Math.round(len5));
+
+  // T21.29-30 (fix pós-review): cache invalida quando a torre se move (buff da amp é posicional)
+  const Smv = flatRoute(freshFunded());
+  putTower(Smv, 'amp', 1, 5, 3);
+  const mvT = putTower(Smv, 'cannon', 1, 5, 6); // 3□ do amp → dentro do anel (base 3□)
+  const mvIn = DO.getTowerStats(Smv, mvT);
+  let mvMoved = true;
+  for (let i = 0; i < 10; i++) if (!DO.tryPursueStep(Smv, mvT, mvT.c + 1, mvT.r)) { mvMoved = false; break; }
+  const mvOutCached = DO.getTowerStats(Smv, mvT);
+  const mvOutFresh = (() => { const c = Object.assign({}, mvT); c._statsCache = null; return DO.getTowerStats(Smv, c); })();
+  check('T21.29 cache invalida após pursue para fora do anel (cached == fresh)',
+    mvMoved && mvT.c === 15 && mvIn.dmg > mvOutFresh.dmg &&
+    approx(mvOutCached.dmg, mvOutFresh.dmg, 1e-9) && approx(mvOutCached.rate, mvOutFresh.rate, 1e-9),
+    'in=' + mvIn.dmg + ' cached=' + mvOutCached.dmg + ' fresh=' + mvOutFresh.dmg + ' pos=' + mvT.c + ',' + mvT.r);
+
+  const Srf = flatRoute(freshFunded());
+  putTower(Srf, 'amp', 1, 5, 3);
+  const rfT = putTower(Srf, 'cannon', 1, 15, 6); // fora do anel
+  const rfOut = DO.getTowerStats(Srf, rfT); // aquece o cache SEM buff
+  let rfMoved = true;
+  for (let i = 0; i < 10; i++) if (!DO.tryRefuelStep(Srf, rfT, rfT.c - 1, rfT.r)) { rfMoved = false; break; }
+  const rfCached = DO.getTowerStats(Srf, rfT);
+  const rfFresh = (() => { const c = Object.assign({}, rfT); c._statsCache = null; return DO.getTowerStats(Srf, c); })();
+  check('T21.30 cache invalida após refuel para dentro do anel (cached == fresh)',
+    rfMoved && rfT.c === 5 && approx(rfCached.dmg, rfFresh.dmg, 1e-9) && rfCached.dmg > rfOut.dmg,
+    'out=' + rfOut.dmg + ' cached=' + rfCached.dmg + ' fresh=' + rfFresh.dmg + ' pos=' + rfT.c + ',' + rfT.r);
+
+  // T21.31 (fix pós-review): spotter spec B reescreve markMul p/ 1.35 (sem vazar 1.15 do T2)
+  const Ssp = flatRoute(freshFunded());
+  const sp = putTower(Ssp, 'sniper', 11, 5, 3); sp.specBranch = 'B';
+  const se2 = putEnemy(Ssp, 272, 9999999);
+  se2.markedTimer = 1; se2.markMul = 1.15; // marca T2 anterior
+  DO.fireTower(Ssp, sp, se2, DO.getTowerStats(Ssp, sp));
+  check('T21.31 sniper spotter spec B: marca 4s com +35% (markMul=1.35)',
+    approx(se2.markedTimer, 4.0, 1e-9) && approx(se2.markMul, 1.35, 1e-9), 't=' + se2.markedTimer + ' mul=' + se2.markMul);
+
+  // T21.32 (fix pós-review): dano sem src limpa o crédito de abate (killDmg)
+  const Sst = flatRoute(freshFunded());
+  const kt2 = putTower(Sst, 'cannon', 41, 5, 3);
+  const ke = putEnemy(Sst, 272, 100);
+  DO.damageEnemy(Sst, ke, 1, { src: kt2 });
+  DO.damageEnemy(Sst, ke, 1e9, {}); // último dano sem src
+  check('T21.32 killDmg não credita abate cujo último dano não teve src',
+    (kt2.killStacks | 0) === 0, 'stacks=' + (kt2.killStacks | 0));
+
+  // T21.33 (fix pós-review): cryo T3 chillVuln pelo pulso real (+25% após o slow do próprio pulso)
+  const Scv = flatRoute(freshFunded());
+  const cv = putTower(Scv, 'cryo', 21, 5, 3);
+  const cve = putEnemy(Scv, 272, 9999999);
+  const stCv = DO.getTowerStats(Scv, cv);
+  const cveHp = cve.hp;
+  DO.fireTower(Scv, cv, cve, stCv);
+  const cvPulses = D.SHOT_PATTERNS.cryo.pulses[2] || 1;
+  const cvExp = stCv.dmg * 0.5 * cvPulses * 1.25;
+  check('T21.33 cryo T3 chillVuln (pulso real): dano ×1.25 no alvo recém-lentificado',
+    approx(cveHp - cve.hp, cvExp, 1e-6), 'dano=' + (cveHp - cve.hp) + ' esperado=' + cvExp);
+
+  // T21.34 (fix pós-review): rail T2 vsArmor pelo tiro real (feixe duplo, +15% via src)
+  const Srv = flatRoute(freshFunded());
+  const rv = putTower(Srv, 'rail', 11, 5, 3);
+  rv.aimAngle = 0;
+  const rve = putEnemy(Srv, 272, 9999999); rve.armor = 10;
+  const stRv = DO.getTowerStats(Srv, rv);
+  const rveHp = rve.hp;
+  DO.fireTower(Srv, rv, rve, stRv);
+  const railBeams = D.SHOT_PATTERNS.rail.beams[1];
+  check('T21.34 rail T2 vsArmor (tiro real): ' + railBeams + ' feixe(s) ×1.15',
+    approx(rveHp - rve.hp, stRv.dmg * railBeams * 1.15, 1e-6), 'dano=' + (rveHp - rve.hp) + ' dmg=' + stRv.dmg + ' feixes=' + railBeams);
 })();
 
 /* ---------- resultado ---------- */

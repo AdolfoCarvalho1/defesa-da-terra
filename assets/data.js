@@ -23,7 +23,7 @@ var DO3 = (function () {
   const TOWERS_DATA = [
     {
       id: 'cannon', name: 'Corveta Gauss', icon: '◉', color: '#e2e8f0', mobility: 3,
-      cost: 50, dmg: 16, rng: 120, rate: 1.1, kind: 'bullet',
+      cost: 50, dmg: 16, rng: 120, rngSq: 3, rate: 1.1, kind: 'bullet',
       fuelCap: 100, battCap: 100, ammoCap: 40, ammoPerShot: 1, battDrain: 0, fuelPerCell: 2,
       desc: 'Bateria balística de alta precisão com perfuração leve.',
       specA: { name: 'Cerco Orbital', desc: 'Tiros de altíssimo calibre com concussão em área.', dmgMul: 2.2, rngAdd: 30, rateMul: 0.6, splash: 50 },
@@ -31,23 +31,23 @@ var DO3 = (function () {
     },
     {
       id: 'gatling', name: 'Caça Vulcan', icon: '⁂', color: '#fbbf24', mobility: 3,
-      cost: 85, dmg: 6, rng: 105, rate: 4.2, kind: 'bullet',
-      fuelCap: 100, battCap: 100, ammoCap: 40, ammoPerShot: 1, battDrain: 0, fuelPerCell: 2, // ammoPerShot 1 por projétil
+      cost: 85, dmg: 6, rng: 105, rngSq: 2, rate: 4.2, kind: 'bullet',
+      fuelCap: 100, battCap: 100, ammoCap: 48, ammoPerShot: 1, battDrain: 0, fuelPerCell: 2, // G1-bal: 40→48 (+20%, 4.8s→5.7s contínuo; c/ station 7/s + factory = sustenta T1)
       desc: 'Cadência insana. Esmaga unidades leves e enxames.',
       specA: { name: 'Superaquecimento', desc: 'Rampa de dano contínuo até +250% no mesmo alvo.', ramp: true },
       specB: { name: 'Canhão de Fragmentação', desc: 'Micro-atordoamento de 0.2s e perfura 2 alvos.', stun: 0.2, pierce: 2 }
     },
     {
       id: 'laser', name: 'Destróier de Fótons', icon: '⌁', color: '#f43f5e', mobility: 3,
-      cost: 115, dmg: 32, rng: 130, rate: 0, kind: 'beam',
-      fuelCap: 100, battCap: 100, ammoCap: 40, ammoPerShot: 0, battDrain: 6, fuelPerCell: 2,
+      cost: 115, dmg: 32, rng: 130, rngSq: 3, rate: 0, kind: 'beam',
+      fuelCap: 100, battCap: 100, ammoCap: 40, ammoPerShot: 0, battDrain: 5.5, fuelPerCell: 2, // G1-bal: drain 6→5 (-16.7%, 16.7s→20s; support 7/s net +2/s)
       desc: 'Feixe contínuo de energia pura térmica. Atinge voadores.',
       specA: { name: 'Raio Desintegrador', desc: 'Multiplica o dano no mesmo alvo até 400%.', beamRamp: true },
       specB: { name: 'Prisma Prismático', desc: 'Divide o feixe em 3 alvos secundários.', prism: 3 }
     },
     {
       id: 'missile', name: 'Bombardeiro MIRV', icon: '➤', color: '#fb923c', mobility: 3,
-      cost: 135, dmg: 42, rng: 145, rate: 0.6, kind: 'splash', splash: 65,
+      cost: 135, dmg: 42, rng: 145, rngSq: 3, rate: 0.6, kind: 'splash', splash: 65,
       fuelCap: 100, battCap: 100, ammoCap: 40, ammoPerShot: 1, battDrain: 0, fuelPerCell: 2,
       desc: 'Ogivas autoguiadas com explosão de área pesada.',
       specA: { name: 'Enxame de Micro-Mísseis', desc: 'Salva de 4 micromísseis rápidos. Alcança voadores.', salvos: 4, dmgMul: 0.45 },
@@ -55,39 +55,39 @@ var DO3 = (function () {
     },
     {
       id: 'cryo', name: 'Fragata Glacial', icon: '❄', color: '#38bdf8', mobility: 3,
-      cost: 80, dmg: 6, rng: 110, rate: 0.85, kind: 'slow',
-      fuelCap: 100, battCap: 100, ammoCap: 40, ammoPerShot: 0, battDrain: 6, fuelPerCell: 2,
+      cost: 80, dmg: 6, rng: 110, rngSq: 2, rate: 0.85, kind: 'slow',
+      fuelCap: 100, battCap: 100, ammoCap: 40, ammoPerShot: 0, battDrain: 5.5, fuelPerCell: 2, // G1-bal: drain 6→5
       desc: 'Pulso glacial que retarda a velocidade inimiga.',
       specA: { name: 'Zero Absoluto', desc: 'Congela 75% e alvos recebem +40% dano físico.', slowVal: 0.75, physDebuff: true },
       specB: { name: 'Nevasca Permanente', desc: 'Campo de frio constante ao redor da torre.', auraSlow: true }
     },
     {
       id: 'tesla', name: 'Cruzador Tempestade', icon: '⚡', color: '#34d399', mobility: 3,
-      cost: 155, dmg: 15, rng: 115, rate: 1.15, kind: 'chain', chain: 4,
-      fuelCap: 100, battCap: 100, ammoCap: 40, ammoPerShot: 0, battDrain: 6, fuelPerCell: 2,
+      cost: 155, dmg: 15, rng: 115, rngSq: 2, rate: 1.15, kind: 'chain', chain: 4,
+      fuelCap: 100, battCap: 100, ammoCap: 40, ammoPerShot: 0, battDrain: 5.5, fuelPerCell: 2, // G1-bal: drain 6→5
       desc: 'Relâmpagos que saltam entre múltiplos invasores.',
       specA: { name: 'Tempestade de Arcos', desc: 'Salta em até 8 alvos com chance de atordoar.', chainAdd: 4, stunChance: 0.35 },
       specB: { name: 'Pulso Eletrostático', desc: 'Dano multiplicado contra escudos azuis (+300%).', shieldBuster: true }
     },
     {
       id: 'sniper', name: 'Espectro Sniper', icon: '✜', color: '#67e8f9', mobility: 3,
-      cost: 175, dmg: 95, rng: 290, rate: 0.32, kind: 'snipe',
-      fuelCap: 100, battCap: 100, ammoCap: 12, ammoPerShot: 1, battDrain: 0, fuelPerCell: 2,
+      cost: 175, dmg: 95, rng: 290, rngSq: 5, rate: 0.32, kind: 'snipe',
+      fuelCap: 100, battCap: 100, ammoCap: 14, ammoPerShot: 1, battDrain: 0, fuelPerCell: 2, // G1-bal: 12→14 (+16.7%, 37s→44s)
       desc: 'Alcance global na arena. Foca o inimigo mais perigoso.',
       specA: { name: 'Tiro de Antimatéria', desc: 'Crítico de 400% e executa com menos de 15% HP.', critChance: 0.4, critMul: 4, exec: 0.15 },
       specB: { name: 'Marcador Holográfico', desc: 'Alvo marcado recebe +35% de dano de todas as torres.', spotter: true }
     },
     {
       id: 'venom', name: 'Infectador Nanopraga', icon: '☠', color: '#a3e635', mobility: 3,
-      cost: 105, dmg: 9, rng: 120, rate: 0.75, kind: 'dot',
-      fuelCap: 100, battCap: 100, ammoCap: 40, ammoPerShot: 0, battDrain: 6, fuelPerCell: 2,
+      cost: 105, dmg: 9, rng: 120, rngSq: 3, rate: 0.75, kind: 'dot',
+      fuelCap: 100, battCap: 100, ammoCap: 40, ammoPerShot: 0, battDrain: 5.5, fuelPerCell: 2, // G1-bal: drain 6→5
       desc: 'Névoa ácida corrosiva que dissolve blindagens.',
       specA: { name: 'Praga Contagiosa', desc: 'Inimigo que morre envenenado espalha a toxina.', plague: true },
       specB: { name: 'Ácido Corrosivo', desc: 'Reduz a armadura dos alvos a zero.', armorStrip: true }
     },
     {
       id: 'amp', name: 'Porta-Naves Amplificadora', icon: '▲', color: '#fde047', mobility: 3,
-      cost: 125, dmg: 0, rng: 125, rate: 0, kind: 'buff',
+      cost: 125, dmg: 0, rng: 125, rngSq: 3, rate: 0, kind: 'buff',
       fuelCap: 100, battCap: 100, ammoCap: 40, ammoPerShot: 1, battDrain: 0, fuelPerCell: 2,
       desc: 'Aumenta dano e alcance das torres vizinhas dentro do anel.',
       specA: { name: 'Reator de Sobrecarga', desc: '+45% Dano e +25% Cadência às vizinhas.', buffDmg: 0.45, buffRate: 0.25 },
@@ -95,8 +95,8 @@ var DO3 = (function () {
     },
     {
       id: 'rail', name: 'Encouraçado Railgun', icon: '╫', color: '#ffffff', mobility: 3,
-      cost: 210, dmg: 65, rng: 230, rate: 0.4, kind: 'pierce',
-      fuelCap: 100, battCap: 100, ammoCap: 12, ammoPerShot: 1, battDrain: 0, fuelPerCell: 2,
+      cost: 210, dmg: 65, rng: 230, rngSq: 4, rate: 0.4, kind: 'pierce',
+      fuelCap: 100, battCap: 100, ammoCap: 14, ammoPerShot: 1, battDrain: 0, fuelPerCell: 2, // G1-bal: 12→14 (+16.7%, 30s→35s)
       desc: 'Disparo hiperveloz que atravessa toda a linha. Nv4+ atinge voadores.',
       specA: { name: 'Trilho de Singularidade', desc: 'Perfura toda a extensão da arena causando dano puro.', fullPierce: true },
       specB: { name: 'Trilho Duplo Turbo', desc: 'Dois tiros alternados com cadência dobrada.', doubleShot: true, rateMul: 2.0 }
@@ -464,77 +464,6 @@ var DO3 = (function () {
     }
   ];
 
-  const SHMUP_STAGES = [
-    { id:1, name:'Netuno: Névoa Azul', planet:'Netuno', theme:'neptune-frontier', bg:'#051425', accent:'#38bdf8', enemyPool:['drone','runner','swarm'], boss:'swarm', duration:22, target:22, speed:1.0, desc:'Patrulha na névoa de Netuno' },
-    { id:2, name:'Saturno: Anéis Cortantes', planet:'Saturno', theme:'saturn-rings', bg:'#1a1408', accent:'#fbbf24', enemyPool:['swarm','wasp','phase'], boss:'phase', duration:24, target:25, speed:1.15, desc:'Navegue entre os anéis' },
-    { id:3, name:'Júpiter: Tempestade Vermelha', planet:'Júpiter', theme:'jupiter-orbit', bg:'#1a0f08', accent:'#fb923c', enemyPool:['tank','bomber','colossus'], boss:'colossus', duration:26, target:28, speed:1.25, desc:'Sobreviva à Grande Mancha' },
-    { id:4, name:'Cinturão: Campo de Destroços', planet:'Cinturão', theme:'asteroid-belt', bg:'#0f0a14', accent:'#94a3b8', enemyPool:['swarm','splitter','shielded'], boss:'splitter', duration:28, target:30, speed:1.35, desc:'Asteroides por toda parte' },
-    { id:5, name:'Terra: Órbita Final', planet:'Terra', theme:'earth-orbit', bg:'#051425', accent:'#22d3ee', enemyPool:['boss1','boss2','boss3'], boss:'boss1', duration:30, target:32, speed:1.45, desc:'Defenda a Terra até o fim' },
-  ];
-  // ===== 5 ESTILOS DE NAVINHA (90s/2000s) - cada fase usa um estilo diferente =====
-  const NAVE_STYLES = [
-    { id:'asteroids', name:'Asteroids: Campo de Meteoros', styleId:'asteroids', bg:'#020617', accent:'#38bdf8',
-      enemyPool:['swarm','mini','splitter'], duration:22, target:22, speed:1.0,
-      desc:'Drift 360° estilo Asteroids — destrua meteoros que se dividem' },
-    { id:'horizontal', name:'Corredor Horizontal: R-Type', styleId:'horizontal', bg:'#0a0f1a', accent:'#fbbf24',
-      enemyPool:['runner','wasp','tank'], duration:24, target:25, speed:1.15,
-      desc:'Scroll lateral com tiro carregado estilo R-Type/Gradius' },
-    { id:'vertical', name:'Bullet Hell: Raiden', styleId:'vertical', bg:'#87CEEB', accent:'#f43f5e',
-      enemyPool:['drone','bomber','shielded'], duration:26, target:28, speed:1.25,
-      desc:'Scroll vertical com boss e chuva de balas estilo Raiden' },
-    { id:'arena', name:'Arena 360°: Geometry Wars', styleId:'arena', bg:'#0f172a', accent:'#34d399',
-      enemyPool:['swarm','drone','phase','splitter'], duration:28, target:30, speed:1.35,
-      desc:'Arena fechada twin-stick estilo Geometry Wars/Smash TV' },
-    { id:'tunnel', name:'Túnel 3D: Tempest', styleId:'tunnel', bg:'#050914', accent:'#a3e635',
-      enemyPool:['phase','wasp','bomber'], duration:30, target:32, speed:1.45,
-      desc:'Túnel pseudo-3D com lanes estilo Tempest/Star Fox' },
-  ];
-  // 5 CAMPANHAS x 5 FASES = 25 fases navinha + 5 TD = 30 total
-  const NAVE_CAMPAIGNS = [
-    { id:'asteroids', name:'Campanha Asteroids', styleId:'asteroids', bg:'#020617', accent:'#38bdf8', desc:'Drift 360° — 5 fases do campo ao núcleo', phases:[
-      { obj:'kill', n:1, name:'Campo Inicial', desc:'Destrua 18 meteoros — aprenda o drift', enemyPool:['swarm','mini'], duration:20, target:18, speed:1.0 },
-      { obj:'kill', n:2, name:'Fragmentação', desc:'22 meteoros que se dividem', enemyPool:['swarm','splitter','mini'], duration:22, target:22, speed:1.1 },
-      { obj:'survive', n:3, name:'Cinturão Denso', desc:'26 asteroides rápidos', enemyPool:['swarm','phase','mini'], duration:24, target:26, speed:1.25 },
-      { obj:'kill', n:4, name:'Tempestade', desc:'28 — enxame + caçadores', enemyPool:['drone','swarm','splitter'], duration:26, target:28, speed:1.35 },
-      { obj:'boss', n:5, name:'Núcleo do Asteroide', desc:'BOSS — 32 + núcleo colossal', enemyPool:['colossus','swarm','mini'], duration:30, target:32, speed:1.45, boss:true },
-    ]},
-    { id:'horizontal', name:'Campanha R-Type', styleId:'horizontal', bg:'#0a0f1a', accent:'#fbbf24', desc:'Corredor horizontal — 5 fases até a Nave-Mãe', phases:[
-      { obj:'kill', n:1, name:'Corredor Inicial', desc:'20 caças — aprenda charge', enemyPool:['runner'], duration:22, target:20, speed:1.0 },
-      { obj:'kill', n:2, name:'Esquadrão', desc:'24 — enxame + wasp', enemyPool:['runner','wasp'], duration:24, target:24, speed:1.12 },
-      { obj:'survive', n:3, name:'Fortaleza', desc:'26 — tanques blindados', enemyPool:['tank','runner','wasp'], duration:26, target:26, speed:1.25 },
-      { obj:'kill', n:4, name:'Enxame', desc:'28 — horda total', enemyPool:['swarm','wasp','tank'], duration:28, target:28, speed:1.35 },
-      { obj:'boss', n:5, name:'Nave-Mãe', desc:'BOSS — 32 + canhões', enemyPool:['colossus','bomber','tank'], duration:30, target:32, speed:1.45, boss:true },
-    ]},
-    { id:'vertical', name:'Campanha Raiden', styleId:'vertical', bg:'#87CEEB', accent:'#f43f5e', desc:'Bullet hell vertical — 5 fases até a fortaleza', phases:[
-      { obj:'kill', n:1, name:'Ascensão', desc:'20 drones — aquecimento', enemyPool:['drone'], duration:22, target:20, speed:1.0 },
-      { obj:'kill', n:2, name:'Tempestade', desc:'24 — chuva de balas', enemyPool:['drone','swarm'], duration:24, target:24, speed:1.15 },
-      { obj:'survive', n:3, name:'Bombardeio', desc:'26 — bombers + escudos', enemyPool:['bomber','shielded','drone'], duration:26, target:26, speed:1.25 },
-      { obj:'kill', n:4, name:'Inferno', desc:'28 — phase + wasp em massa', enemyPool:['phase','wasp','bomber'], duration:28, target:28, speed:1.38 },
-      { obj:'boss', n:5, name:'Fortaleza Voadora', desc:'BOSS — 32 + chefe final', enemyPool:['boss1','boss2','colossus'], duration:30, target:32, speed:1.45, boss:true },
-    ]},
-    { id:'arena', name:'Campanha Geometry', styleId:'arena', bg:'#0f172a', accent:'#34d399', desc:'Arena 360° — 5 fases de sobrevivência', phases:[
-      { obj:'kill', n:1, name:'Arena Pequena', desc:'18 — primeiro contato', enemyPool:['swarm'], duration:20, target:18, speed:1.0 },
-      { obj:'kill', n:2, name:'Hordas', desc:'22 — drones caçadores', enemyPool:['swarm','drone'], duration:22, target:22, speed:1.12 },
-      { obj:'survive', n:3, name:'Caçadores', desc:'26 — phase + splitter', enemyPool:['phase','splitter','swarm'], duration:24, target:26, speed:1.25 },
-      { obj:'kill', n:4, name:'Sobrecarga', desc:'28 — tudo ao mesmo tempo', enemyPool:['swarm','phase','splitter','drone'], duration:26, target:28, speed:1.38 },
-      { obj:'boss', n:5, name:'Mestre da Arena', desc:'BOSS — 32 + colosso', enemyPool:['colossus','phase','swarm'], duration:30, target:32, speed:1.48, boss:true },
-    ]},
-    { id:'tunnel', name:'Campanha Tempest', styleId:'tunnel', bg:'#050914', accent:'#a3e635', desc:'Túnel 3D — 5 fases até o coração', phases:[
-      { obj:'kill', n:1, name:'Túnel Inicial', desc:'18 — aprenda as lanes', enemyPool:['phase'], duration:20, target:18, speed:1.0 },
-      { obj:'kill', n:2, name:'Curvas', desc:'22 — wasps nas curvas', enemyPool:['wasp','phase'], duration:22, target:22, speed:1.12 },
-      { obj:'survive', n:3, name:'Aceleração', desc:'26 — bombers velozes', enemyPool:['bomber','phase','wasp'], duration:24, target:26, speed:1.28 },
-      { obj:'kill', n:4, name:'Inversão', desc:'28 — lanes invertidas', enemyPool:['phase','wasp','bomber'], duration:26, target:28, speed:1.38 },
-      { obj:'boss', n:5, name:'Coração do Túnel', desc:'BOSS — 32 + guardião', enemyPool:['colossus','phase','wasp'], duration:30, target:32, speed:1.48, boss:true },
-    ]},
-  ];
-  const METAL_STAGES = [
-    { id:1, name:'Netuno: Geleira Abissal', planet:'Netuno', theme:'neptune-frontier', bg:'#051425', accent:'#38bdf8', enemyPool:['swarm','drone'], platTheme:'ice', duration:35, target:24, gravity:950, desc:'Infantaria alien na geleira' },
-    { id:2, name:'Saturno: Plataformas de Gelo', planet:'Saturno', theme:'saturn-rings', bg:'#1a1408', accent:'#fbbf24', enemyPool:['wasp','phase'], platTheme:'rings', duration:35, target:26, gravity:820, desc:'Salte entre anéis' },
-    { id:3, name:'Júpiter: Fornalha', planet:'Júpiter', theme:'jupiter-orbit', bg:'#1a0f08', accent:'#fb923c', enemyPool:['tank','bomber'], platTheme:'volcano', duration:35, target:28, gravity:1050, desc:'Chão que queima' },
-    { id:4, name:'Cinturão: Ruínas', planet:'Cinturão', theme:'asteroid-belt', bg:'#0f0a14', accent:'#94a3b8', enemyPool:['shielded','splitter'], platTheme:'ruins', duration:35, target:30, gravity:900, desc:'Ruínas de batalha' },
-    { id:5, name:'Terra: Trincheiras Finais', planet:'Terra', theme:'earth-orbit', bg:'#051425', accent:'#22d3ee', enemyPool:['colossus','boss1'], platTheme:'earth', duration:38, target:32, gravity:950, desc:'Última trincheira' },
-  ];
-
   const TECH_UPGRADES = [
     { id: 'start_gold', name: 'Reserva de Créditos', desc: '+60 Créditos Iniciais por nível.', max: 5, cost: 10 },
     { id: 'global_dmg', name: 'Calibragem de Matriz', desc: '+5% de Dano Global em todas as torres.', max: 5, cost: 15 },
@@ -603,6 +532,11 @@ var DO3 = (function () {
     return parts.join(' ');
   }
 
+  // Onda 1.5: +30% de spawns a cada faixa de 10 ondas (11-20 ×1.3, 21-30 ×1.6, ...)
+  function getWaveSpawnMultiplier(wave) {
+    return 1 + 0.3 * Math.floor((Math.max(1, wave) - 1) / 10);
+  }
+
   function wpToPixels(wps) {
     return wps.map(w => ({ x: w[0] * CELL_SIZE + CELL_SIZE / 2, y: w[1] * CELL_SIZE + CELL_SIZE / 2 }));
   }
@@ -646,12 +580,53 @@ var DO3 = (function () {
     data: null,
     defaults() {
       return {
-        v: 3, unlockedMap: 1, crystals: 30, mapStars: {}, tech: {},
+        v: 3, unlockedMap: 1, crystals: 30, mapStars: [], tech: {},
         achievements: [], bestEndless: {}, lastDiff: 'normal', muted: false, autoNext: false,
-        naveProgress: { asteroids:1, horizontal:1, vertical:1, arena:1, tunnel:1 },
-        naveStars: { asteroids:[0,0,0,0,0], horizontal:[0,0,0,0,0], vertical:[0,0,0,0,0], arena:[0,0,0,0,0], tunnel:[0,0,0,0,0] },
-        shipLevels: { cannon:1, gatling:1, laser:1, missile:1, cryo:1, tesla:1, sniper:1, venom:1, amp:1, rail:1 }
+        tutorialSeen: false
       };
+    },
+    // Onda 1.8: normalização defensiva — save corrompido nunca vira throw/NaN
+    // (tech sempre {} numérico, mapStars array de números, crystals/credits numéricos,
+    //  campos desconhecidos ignorados).
+    normalize(parsed) {
+      const d = this.defaults();
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return d;
+      const num = (v, fb) => { const n = Number(v); return Number.isFinite(n) ? n : fb; };
+      if (parsed.tech && typeof parsed.tech === 'object' && !Array.isArray(parsed.tech)) {
+        const tech = {};
+        for (const k in parsed.tech) {
+          const up = TECH_UPGRADES.find(u => u.id === k);
+          if (!up) continue; // campo desconhecido ignorado
+          const n = Math.floor(num(parsed.tech[k], 0));
+          if (n > 0) tech[k] = Math.min(up.max, n);
+        }
+        d.tech = tech;
+      }
+      const stars = [];
+      if (parsed.mapStars && typeof parsed.mapStars === 'object') {
+        for (const k in parsed.mapStars) {
+          const idx = Number(k);
+          const n = Number(parsed.mapStars[k]);
+          if (Number.isInteger(idx) && idx >= 0 && idx < MAPS_DATA.length && Number.isFinite(n) && n > 0) stars[idx] = n;
+        }
+      }
+      d.mapStars = stars;
+      d.unlockedMap = Math.max(1, Math.min(MAPS_DATA.length, Math.floor(num(parsed.unlockedMap, 1))));
+      d.crystals = Math.max(0, num(parsed.crystals, 30));
+      d.lastDiff = DIFFICULTIES[parsed.lastDiff] ? parsed.lastDiff : 'normal';
+      d.muted = !!parsed.muted;
+      d.autoNext = !!parsed.autoNext;
+      d.tutorialSeen = !!parsed.tutorialSeen;
+      if (parsed.bestEndless && typeof parsed.bestEndless === 'object') {
+        const best = {};
+        for (const k in parsed.bestEndless) {
+          const n = num(parsed.bestEndless[k], 0);
+          if (n > 0) best[k] = n;
+        }
+        d.bestEndless = best;
+      }
+      if (Array.isArray(parsed.achievements)) d.achievements = parsed.achievements.filter(a => typeof a === 'string');
+      return d;
     },
     load() {
       this.data = this.defaults();
@@ -660,7 +635,7 @@ var DO3 = (function () {
           const raw = localStorage.getItem(this.key);
           if (raw) {
             const parsed = JSON.parse(raw);
-            if (parsed && parsed.v === 3) Object.assign(this.data, parsed);
+            if (parsed && parsed.v === 3) this.data = this.normalize(parsed);
           }
         }
       } catch (e) { /* storage indisponível */ }
@@ -783,14 +758,6 @@ var DO3 = (function () {
 const MERGE_PARTS = { 1: 12, 2: 24, 3: 48, 4: 96 }; // peças ⚙ p/ fundir tier N → N+1
 const TIER_NAMES = ['T1', 'T2', 'T3', 'T4', 'T5'];
 function getTier(level) { return Math.min(5, Math.floor(((level || 1) - 1) / 10) + 1); }
-const TIER_STATS = [
-  null,
-  { dmg: 1,    rate: 1,    rng: 1,     parts: 0 },
-  { dmg: 2.2,  rate: 1.15, rng: 1.10,  parts: 20 },
-  { dmg: 4.8,  rate: 1.30, rng: 1.21,  parts: 40 },
-  { dmg: 10,   rate: 1.50, rng: 1.331, parts: 80 },
-  { dmg: 22,   rate: 1.70, rng: 1.464, parts: 160 }
-];
 // Fase 3 — variações de tiro por tier (consumido por fireTower)
 const SHOT_PATTERNS = {
   cannon:  { multi: [1, 2, 3, 4, 5] },                                  // leque largo
@@ -806,23 +773,24 @@ const SHOT_PATTERNS = {
 };
 // Fase 4 — super automático por tipo (carga = res dos abates daquele tipo)
 const SUPERS_AUTO = {
-  cannon:  { key: 'cannon',  name: 'Barragem Orbital',    desc: '20 obuses caem na maior concentração de inimigos.', col: '#e2e8f0' },
+  cannon:  { key: 'cannon',  name: 'Barragem Orbital',    desc: '14 obuses caem na maior concentração de inimigos.', col: '#e2e8f0' },
   gatling: { key: 'gatling', name: 'Tornado de Chumbo',   desc: '360° por 3s acertando tudo em alcance dobrado.', col: '#fbbf24' },
   laser:   { key: 'laser',   name: 'Prisma Solar',        desc: 'Feixe varre a rota inteira por 2.5s.', col: '#f43f5e' },
-  missile: { key: 'missile', name: 'Enxame MIRV',         desc: '16 mísseis nos alvos mais caros.', col: '#fb923c' },
-  cryo:    { key: 'cryo',    name: 'Era Glacial',         desc: 'Congela TODOS os inimigos por 3s.', col: '#38bdf8' },
-  tesla:   { key: 'tesla',   name: 'Tempestade Final',    desc: '12 relâmpagos em cadeia global.', col: '#34d399' },
-  sniper:  { key: 'sniper',  name: 'Sentença',            desc: 'Executa os 3 inimigos de menor HP na tela.', col: '#67e8f9' },
-  venom:   { key: 'venom',   name: 'Maré Nanopraga',      desc: 'Envenena todos os inimigos em tela por 8s.', col: '#a3e635' },
-  amp:     { key: 'amp',     name: 'Sobrecarga Total',    desc: 'Todas as torres +100% dano por 6s (anel dourado).', col: '#fde047' },
+  missile: { key: 'missile', name: 'Enxame MIRV',         desc: '10 mísseis nos alvos mais caros.', col: '#fb923c' },
+  cryo:    { key: 'cryo',    name: 'Era Glacial',         desc: 'Congela TODOS os inimigos por 1.8s.', col: '#38bdf8' },
+  tesla:   { key: 'tesla',   name: 'Tempestade Final',    desc: '7 relâmpagos em cadeia global.', col: '#34d399' },
+  sniper:  { key: 'sniper',  name: 'Sentença',            desc: 'Executa os 2 inimigos de menor HP (chefe sofre dano massivo).', col: '#67e8f9' },
+  venom:   { key: 'venom',   name: 'Maré Nanopraga',      desc: 'Envenena todos os inimigos em tela por 5s.', col: '#a3e635' },
+  amp:     { key: 'amp',     name: 'Sobrecarga Total',    desc: 'Todas as torres +100% dano por 4s (anel dourado).', col: '#fde047' },
   rail:    { key: 'rail',    name: 'Lança Estelar',       desc: '3 linhas perfurantes cruzam o mapa.', col: '#ffffff' }
 };
-function superThreshold(tier) { return Math.max(12, 30 - (tier || 1) * 3); }
+// BAL2: thresholds +50% (27→41 … 15→23) — autos disparavam ~4.5x/onda/T2 (27 supers/onda com 6 torres)
+function superThreshold(tier) { return Math.max(18, Math.round((30 - (tier || 1) * 3) * 1.5)); }
 
 // Fase 5 — Fábrica Orbital (produz peças ⚙ e créditos por onda completa)
 const FACTORY_DATA = {
   id: 'factory', name: 'Fábrica Orbital', icon: '⚙', color: '#34d399', kind: 'factory',
-  cost: 120, maxLevel: 5,
+  cost: 132, maxLevel: 5, // BAL2: 120→132 (+10%, freia rush de fábrica antes da 1ª estação)
   desc: 'Prédio industrial: produz PEÇAS ⚙ e créditos a cada onda completa.',
   upgradePartsCost: lvl => 15 * lvl,
   upgradeCreditCost: lvl => Math.round(90 * Math.pow(1.8, lvl)),
@@ -831,14 +799,17 @@ const FACTORY_DATA = {
   fuelBoost: lvl => 0.25 * lvl
 };
 // E1/E2 — Estação Espacial (base fixa) e Nave de Apoio (móvel): reabastecem fuel/batt/ammo em raio
+// G1-bal: station 400→340 (-15%, eficiência vs support 2.2x→1.7x; comprável onda ~5-6 após 2-3 torres);
+// support 90→100 (+11%, freia spam; ainda comprável onda ~1-3); ammo 6→7 / 3→3.5 (+16.7%,
+// gargalo gatling 8.4/s: station 6→7 + factory 25% = 8.75/s sustenta T1; fuel/batt intactos).
 const STATION_DATA = {
-  id: 'station', name: 'Estação Espacial', cost: 400, kind: 'station',
-  supplyRadius: 170, rates: { fuel: 12, batt: 14, ammo: 6 }, color: '#f5a83d',
+  id: 'station', name: 'Estação Espacial', cost: 375, kind: 'station', // BAL2: 340→375 (+10%, logística pesa mais com autos nerfados)
+  supplyRadius: 170, supplySq: 4, rates: { fuel: 12, batt: 14, ammo: 7 }, color: '#f5a83d',
   desc: 'Base fixa de suprimento: reabastece combustível, bateria e munição das torres no raio.'
 };
 const SUPPORT_DATA = {
-  id: 'support', name: 'Nave de Apoio', cost: 90, kind: 'support',
-  supplyRadius: 95, rates: { fuel: 6, batt: 7, ammo: 3 }, color: '#7dd3fc',
+  id: 'support', name: 'Nave de Apoio', cost: 110, kind: 'support', // BAL2: 100→110 (+10%, freia spam de apoio onda 1-3)
+  supplyRadius: 95, supplySq: 2, rates: { fuel: 6, batt: 7, ammo: 3.5 }, color: '#7dd3fc',
   desc: 'Nave logística móvel: reabastece combustível, bateria e munição das torres no raio.'
 };
 // C1 — Componentes (5 níveis cada; custo fixo créditos [60,110,180,280,420] e peças [0,5,10,20,35]).
@@ -951,12 +922,12 @@ const TIER_LOGIC = {
 // __DO3_PART2__
   return {
     COLS, ROWS, CELL_SIZE, BOARD_W, BOARD_H, SAVE_KEY, TOWER_MAX_LVL, PALETTE,
-    TOWERS_DATA, PILOTS, ENEMIES_DATA, MAPS_DATA, SHMUP_STAGES, NAVE_STYLES, NAVE_CAMPAIGNS, METAL_STAGES, TECH_UPGRADES, DIFFICULTIES,
+    TOWERS_DATA, PILOTS, ENEMIES_DATA, MAPS_DATA, TECH_UPGRADES, DIFFICULTIES,
     TARGET_MODES, WAVE_LETTERS, WAVE_LABELS, AIR_KINDS, SUPERS,
     MUTATIONS, COMBO, getMutationChoices,
-    parseWaveString, makeEndlessWave, wpToPixels, getPathLength, getPosAtDist,
+    parseWaveString, makeEndlessWave, getWaveSpawnMultiplier, wpToPixels, getPathLength, getPosAtDist,
     getPathBlockedCells, Save, ACHIEVEMENTS,
-    MERGE_PARTS, TIER_STATS, TIER_NAMES, getTier, SHOT_PATTERNS, SUPERS_AUTO, superThreshold,
+    MERGE_PARTS, TIER_NAMES, getTier, SHOT_PATTERNS, SUPERS_AUTO, superThreshold,
     FACTORY_DATA, HIVEMIND, TIER_LOGIC,
     STATION_DATA, SUPPORT_DATA, COMP_DEFS
   };

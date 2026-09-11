@@ -68,7 +68,6 @@
     constructor() { super('Game'); }
 
     create(data) {
-      document.body.classList.remove('mode-nave');
       SND.unlock();
       D.Save.load();
       SND.setMuted(!!D.Save.data.muted);
@@ -78,17 +77,20 @@
       this.params = { mapIdx, diffKey, endless };
       this.S = startNewGame(mapIdx, diffKey, endless);
       this.paused = false;
+      // Onda 5: sessão nova nunca herda TweenManager pausado de uma pausa anterior
+      try { this.tweens.resumeAll(); } catch (eTR) {}
       this.speedIdx = 0;
       this.speeds = [1, 2, 4];
       this.armed = null;
       this.placingId = null;
       this.selected = null;
-      this.zaps = []; this.tracers = []; this.spawners = [];
+      this.zaps = []; this.tracers = [];
       this.enemyViews = {}; this.towerViews = {};
       this.pointerWorld = { x: 0, y: 0 };
       this.hoverCell = { c: -1, r: -1 };
       this._lastCredits = -1; this._lastLives = -1;
       this._lastWave = -1; this._waveTotal = 1;
+      this._prevPreviewWave = undefined; this._prevPreviewKey = ''; // E4: força 1º rebuild por sessão
       this._hud = null; // U2.1: invalida cache de nos DOM (botoes sao clonados em bindInput)
 
       const scr = document.getElementById('topbar');
@@ -119,6 +121,13 @@
         const _db = document.getElementById('btn-dmgnum');
         if (_db) { _db.setAttribute('aria-pressed', this.S.showDmgNum ? 'true' : 'false'); _db.classList.toggle('active', !!this.S.showDmgNum); _db.style.opacity = this.S.showDmgNum ? '1' : '0.45'; }
       } catch (e2) {}
+      // TU-TUTO: coach marks na 1ª partida (D.Save.tutorialSeen); "?" reabre
+      this._tutActive = false; this._tutIdx = -1;
+      try { this._tutBindButtons(); } catch (eT0) {}
+      try {
+        const _seen = !!(D.Save && D.Save.data && D.Save.data.tutorialSeen);
+        if (!_seen) this.time.delayedCall(500, () => { try { this._tutStart(false); } catch (eT1) {} });
+      } catch (eT2) {}
 
       SND.musicTick('combat', 0);
       this.toastTimer = this.time.addEvent({ delay: 700, loop: true, callback: () => this.pollToasts() });
@@ -135,7 +144,14 @@
       if (boardShell) boardShell.classList.remove('tower-panel-open');
       const towerPanel = document.getElementById('tower-panel');
       if (towerPanel) towerPanel.classList.add('hidden');
+      // Onda 5: anel de suprimento (.supply-ring) não pode sobrar entre sessões
+      try {
+        const sr = document.querySelector('#board-shell > .supply-ring');
+        if (sr) sr.remove();
+        this._supplyRingKey = null;
+      } catch (eSR) {}
       hideOverlay('modal-end'); hideOverlay('pause-overlay'); hideTip();
+      try { this._tutHide(); } catch (eT3) {}
       ['banner'].forEach(id => { const el = document.getElementById(id); if (el) el.classList.remove('show'); });
       this._bannerQueue = []; this._bannerBusy = false;
     }
@@ -166,8 +182,11 @@
         }
       } catch(e){}
       // S4.1 — lua `moon` pequena num canto do céu, fora da área de path (atrás do path).
+      // G2 — variante por map.theme via moonFor(): 1 draw estático, tint+escala sobre a base creme.
       try {
-        if(this.textures.exists('moon')){
+        const _moonSpec = (typeof moonFor === 'function') ? moonFor(mapTheme) : { key: 'moon', tint: 0xffffff, scale: 0.3 };
+        const _moonKey = (_moonSpec && _moonSpec.key && this.textures.exists(_moonSpec.key)) ? _moonSpec.key : 'moon';
+        if(this.textures.exists(_moonKey)){
           let spot = null;
           // Faixa do céu (fileira r=1, longe da coluna #supers do DOM): célula livre = fora do path.
           for(let c = 1; c < COLS - 1 && !spot; c++){
@@ -188,14 +207,18 @@
             for(const s of corners){ if(isFree(s[0], s[1])){ spot = s; break; } }
           }
           if(spot){
-            this.duskMoon = this.add.image(spot[0], spot[1], 'moon').setDepth(0.7).setAlpha(0.8).setScale(0.3);
+            this.duskMoon = this.add.image(spot[0], spot[1], _moonKey).setDepth(0.7).setAlpha(0.8).setScale((_moonSpec && _moonSpec.scale) || 0.3);
+            if(_moonSpec && _moonSpec.tint != null) this.duskMoon.setTint(_moonSpec.tint);
           }
         }
       } catch(e){}
-      const g = this.make.graphics({ add: false });
-      g.fillStyle(0xffffff, 1);
-      for (let i = 0; i < 70; i++) g.fillCircle(Math.random() * BW, Math.random() * BH, Math.random() < 0.9 ? 1 : 2);
-      g.generateTexture('bgstars', BW, BH); g.destroy();
+      // E3: só gera a textura uma vez por página (restart não recria 70 círculos)
+      if (!this.textures.exists('bgstars')) {
+        const g = this.make.graphics({ add: false });
+        g.fillStyle(0xffffff, 1);
+        for (let i = 0; i < 70; i++) g.fillCircle(Math.random() * BW, Math.random() * BH, Math.random() < 0.9 ? 1 : 2);
+        g.generateTexture('bgstars', BW, BH); g.destroy();
+      }
       this.add.image(BW / 2, BH / 2, 'bgstars').setAlpha(0.35).setDepth(1);
 
       // GRID pixel art: linhas 1px a cada 44px com alpha .06 (snap inteiro)
@@ -262,27 +285,62 @@
 
     buildFxLayers() {
       this.fxUnder = this.add.container(0, 0).setDepth(20);
-      this.projLayer = this.add.container(0, 0).setDepth(40);
       this.fxOver = this.add.container(0, 0).setDepth(50);
       this.beamGfx = this.scene ? this.add.graphics().setDepth(45) : null;
       this.vortexGfx = this.add.graphics().setDepth(21);
       this.floatLayer = this.add.container(0, 0).setDepth(70);
       this.pools = {};
+      // E5: contadores de imagens ativas por pool (substituem varredura O(pool)/frame)
+      this._poolActive = {};
+      this._poolTotal = 0;
       this.floatPool = [];
       this.activeFloats = [];
       // Brief 08 A6: pool de projeteis do Game TD (obter/devolver, sem destroy() por frame)
       this._projPool = [];
       this._projKnown = new Set();
+      // G3 — brasas ambiente: ~10 'ember' (textura de textures.js) à deriva lenta sobre o
+      // board em modo dusk (duskGfx presente = board dusk default S4.1, ou THEMES[theme].dusk).
+      // Reusa o pool atual via getImg (sem life/vx/vy => updateParticles ignora); drift por
+      // tween yoyo (custo zero/frame no nosso código, zero alocação por frame, sem dano/timing).
+      try {
+        const _tInfo = (window.TILES && window.TILES.THEMES && this.S && this.S.map) ? window.TILES.THEMES[this.S.map.theme] : null;
+        if (this.duskGfx || (_tInfo && _tInfo.dusk)) {
+          const EMBER_TINTS = [0xe0512b, 0xf5a83d, 0xfb923c];
+          for (let i = 0; i < 10; i++) {
+            const m = this.getImg('ember');
+            m.setTexture('ember').setTint(EMBER_TINTS[i % EMBER_TINTS.length]);
+            m.setPosition(Math.random() * BW, Math.random() * BH);
+            m.setScale(0.5 + Math.random() * 0.5).setAlpha(0.35 + Math.random() * 0.25);
+            if (!m._inLayer) { this.fxUnder.add(m); m._inLayer = true; }
+            this.tweens.add({ targets: m, x: m.x + (Math.random() - 0.5) * 60, y: m.y - (30 + Math.random() * 50), duration: 4000 + Math.random() * 4000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: Math.random() * 3000 });
+          }
+        }
+      } catch (e) {}
     }
 
     getImg(key) {
       if (!this.pools[key]) this.pools[key] = [];
       const arr = this.pools[key];
-      for (const img of arr) if (!img.active) { img.setActive(true).setVisible(true); return img; }
+      for (const img of arr) if (!img.active) {
+        img.setActive(true).setVisible(true);
+        if (this._poolActive) { this._poolActive[key] = (this._poolActive[key] || 0) + 1; this._poolTotal = (this._poolTotal || 0) + 1; }
+        return img;
+      }
       const img = this.add.image(0, 0, key);
       img.setActive(true);
       arr.push(img);
+      if (this._poolActive) { this._poolActive[key] = (this._poolActive[key] || 0) + 1; this._poolTotal = (this._poolTotal || 0) + 1; }
       return img;
+    }
+
+    // E5: devolve imagem ao pool mantendo contadores coerentes (usado no expiration)
+    _freeImg(key, img) {
+      if (!img.active) return;
+      img.setActive(false).setVisible(false);
+      if (this._poolActive) {
+        this._poolActive[key] = Math.max(0, (this._poolActive[key] || 0) - 1);
+        this._poolTotal = Math.max(0, (this._poolTotal || 0) - 1);
+      }
     }
 
     // Brief 08 A6: projeteis do Game TD reutilizam _img (mesma textura/tint/escala/depth/posicao;
@@ -307,8 +365,7 @@
       // níveis altos geram 2.2x inimigos → sem cap estrito acumula 500+ dots
       const arr = this.pools[k];
       if (arr) {
-        let active = 0;
-        for (const img of arr) if (img.active) active++;
+        const active = (this._poolActive && this._poolActive[k]) || 0;
         // thresholds baixos: 45 dots já é visível, >70 começa a poluir
         if (active > 55) {
           if (active > 85) return; // tela poluída, skip total
@@ -335,6 +392,14 @@
       }
     }
 
+    // G3 — paleta quente das explosões: round-robin determinístico fogo/brasa
+    // (laranja #fb923c / âmbar #f5a83d / brasa #e0512b). Sem roxo, sem aleatoriedade por frame.
+    warmBoomCol() {
+      const PAL = ['#fb923c', '#f5a83d', '#e0512b'];
+      this._boomWarmIdx = (((this._boomWarmIdx | 0) + 1) % PAL.length);
+      return PAL[this._boomWarmIdx];
+    }
+
     boomFx(x, y, r, col, big) {
       // cap flash/ring também — evita acúmulo em onda 48 x4
       const softArr = this.pools['soft'];
@@ -348,7 +413,9 @@
       // sparks já têm cap interno, mas reduz life para sumir mais rápido em alta carga
       this.spark(x, y, '#ffffff', big ? 8 : 5, r * 4.2, 0.32);
       this.spark(x, y, col, big ? 12 : 6, r * 3.0, 0.42);
-      this.spark(x, y, '#64748b', big ? 5 : 3, r * 1.8, 0.55);
+      // G3 — detrito frio genérico '#64748b' vira brasa '#e0512b'; preserva o frio SÓ quando
+      // o núcleo é o azul do ionBeam ('#38bdf8', semântica própria de beam — não mexer).
+      this.spark(x, y, (col === '#38bdf8' ? '#64748b' : '#e0512b'), big ? 5 : 3, r * 1.8, 0.55);
       const ringArr = this.pools['ring'];
       if (ringArr) { let a=0; for(const im of ringArr) if(im.active) a++; if(a>12) { /* skip ring */ } else {
         const ring = this.getImg('ring');
@@ -402,7 +469,8 @@
         card.setAttribute('role', 'button');
         card.tabIndex = 0;
         // V2: stats inline — DPS calculado + alcance + ✈ se atinge ar (sem hover)
-        let dpsTxt = 'suporte', rngTxt = def.rng, airTxt = '';
+        // RANGESQ: alcance em □ (rngSqEff, ex. "3□")
+        let dpsTxt = 'suporte', rngTxt = (def.rngSq != null ? def.rngSq + '□' : def.rng), airTxt = '';
         try {
           const tmpT = { defRef: def, level: 1, specBranch: null, x: 0, y: 0 };
           const st2 = getTowerStats(this.S, tmpT);
@@ -410,7 +478,8 @@
           else if (def.kind === 'buff') dpsTxt = 'buff';
           else if (st2.rate) dpsTxt = Math.round(st2.dmg * st2.rate) + ' DPS';
           else dpsTxt = Math.round(st2.dmg) + ' DMG';
-          rngTxt = Math.round(st2.rng);
+          var _sq2 = (st2.rngSqEff != null ? st2.rngSqEff : (st2.rng / 44));
+          rngTxt = (Math.round(_sq2 * 10) / 10) + '□';
           if (canHitAir(tmpT)) airTxt = ' ✈';
         } catch (e) { /* headless fallback: usa base */ }
         const dps = def.kind === 'beam' ? '~' + def.dmg + '/s' : (def.rate ? '~' + Math.round(def.dmg * def.rate) + ' DPS' : 'suporte');
@@ -430,7 +499,7 @@
         const tipHtml =
           '<b style="color:' + def.color + '">' + def.name + '</b><br>' +
           '<span class="tt-muted">' + def.desc + '</span><br>' +
-          'DANO ' + def.dmg + (def.kind === 'beam' ? '/s' : '') + ' • ALCANCE ' + def.rng +
+          'DANO ' + def.dmg + (def.kind === 'beam' ? '/s' : '') + ' • ALCANCE ' + (def.rngSq != null ? def.rngSq + '□' : def.rng) +
           (def.rate ? ' • CADÊNCIA ' + def.rate + '/s' : '') + '<br>' +
           '<b>' + dps + '</b>' + (def.splash ? ' • ÁREA ' + def.splash : '') + '<br>' +
           '<span class="tt-good">Nv4\u25B8A:</span> ' + def.specA.name + ' \u2014 ' + def.specA.desc + '<br>' +
@@ -501,16 +570,16 @@
         card.dataset.id = 'station';
         card.setAttribute('role', 'button');
         card.tabIndex = 0;
-        card.setAttribute('aria-label', sd.name + '. Custo $' + sd.cost + '. Suprimento em raio ' + sd.supplyRadius);
+        card.setAttribute('aria-label', sd.name + '. Custo $' + sd.cost + '. Suprimento em raio ' + (sd.supplySq != null ? sd.supplySq + '□' : sd.supplyRadius));
         card.innerHTML =
           '<div class="sc-icon" style="color:' + sd.color + '">🛰</div>' +
           '<div class="sc-body"><div class="sc-name" style="color:#f5a83d">' + sd.name + '</div>' +
           '<div class="sc-cost">$' + sd.cost + '</div>' +
-          '<div class="sc-stats" style="font-family:JetBrains Mono,monospace;font-size:10px;color:#f5a83d;line-height:1.2">Raio ' + sd.supplyRadius + ' • +' + sd.rates.fuel + '/+' + sd.rates.batt + '/+' + sd.rates.ammo + '/s</div></div>';
+          '<div class="sc-stats" style="font-family:JetBrains Mono,monospace;font-size:10px;color:#f5a83d;line-height:1.2">Raio ' + (sd.supplySq != null ? sd.supplySq + '□' : sd.supplyRadius) + ' • +' + sd.rates.fuel + '/+' + sd.rates.batt + '/+' + sd.rates.ammo + '/s</div></div>';
         this.bindTip(card,
           '<b style="color:#f5a83d">' + sd.name + '</b><br>' +
           '<span class="tt-muted">' + sd.desc + '</span><br>' +
-          'RAIO ' + sd.supplyRadius + ': <b>+' + sd.rates.fuel + ' fuel +' + sd.rates.batt + ' batt +' + sd.rates.ammo + ' ammo/s</b><br>' +
+          'RAIO ' + (sd.supplySq != null ? sd.supplySq + '□' : sd.supplyRadius) + ': <b>+' + sd.rates.fuel + ' fuel +' + sd.rates.batt + ' batt +' + sd.rates.ammo + ' ammo/s</b><br>' +
           'NÃO combate • Venda 70%');
         const pickSt = () => {
           SND.ui();
@@ -537,16 +606,16 @@
         card.dataset.id = 'support';
         card.setAttribute('role', 'button');
         card.tabIndex = 0;
-        card.setAttribute('aria-label', sd.name + '. Custo $' + sd.cost + '. Suprimento em raio ' + sd.supplyRadius);
+        card.setAttribute('aria-label', sd.name + '. Custo $' + sd.cost + '. Suprimento em raio ' + (sd.supplySq != null ? sd.supplySq + '□' : sd.supplyRadius));
         card.innerHTML =
           '<div class="sc-icon" style="color:' + sd.color + '">🚀</div>' +
           '<div class="sc-body"><div class="sc-name" style="color:#7dd3fc">' + sd.name + '</div>' +
           '<div class="sc-cost">$' + sd.cost + '</div>' +
-          '<div class="sc-stats" style="font-family:JetBrains Mono,monospace;font-size:10px;color:#7dd3fc;line-height:1.2">Raio ' + sd.supplyRadius + ' • +' + sd.rates.fuel + '/+' + sd.rates.batt + '/+' + sd.rates.ammo + '/s</div></div>';
+          '<div class="sc-stats" style="font-family:JetBrains Mono,monospace;font-size:10px;color:#7dd3fc;line-height:1.2">Raio ' + (sd.supplySq != null ? sd.supplySq + '□' : sd.supplyRadius) + ' • +' + sd.rates.fuel + '/+' + sd.rates.batt + '/+' + sd.rates.ammo + '/s</div></div>';
         this.bindTip(card,
           '<b style="color:#7dd3fc">' + sd.name + '</b><br>' +
           '<span class="tt-muted">' + sd.desc + '</span><br>' +
-          'RAIO ' + sd.supplyRadius + ': <b>+' + sd.rates.fuel + ' fuel +' + sd.rates.batt + ' batt +' + sd.rates.ammo + ' ammo/s</b><br>' +
+          'RAIO ' + (sd.supplySq != null ? sd.supplySq + '□' : sd.supplyRadius) + ': <b>+' + sd.rates.fuel + ' fuel +' + sd.rates.batt + ' batt +' + sd.rates.ammo + ' ammo/s</b><br>' +
           'NÃO combate • Venda 70%');
         const pickSu = () => {
           SND.ui();
@@ -637,26 +706,34 @@
       this.el('tp-level').innerHTML = '<span style="font-family:JetBrains Mono;font-size:10px;font-weight:800;color:var(--gold);margin-right:6px">NV '+t.level+'/'+D.TOWER_MAX_LVL+'</span><span style="font-size:9px;color:var(--muted)">'+pct+'%</span>' + tierBadge;
       this.el('tp-stats').innerHTML =
         '<div><span>DANO</span><b>' + Math.round(stats.dmg) + (def.kind === 'beam' ? '/s' : '') + '</b></div>' +
-        '<div><span>ALCANCE</span><b>' + Math.round(stats.rng) + '</b></div>' +
+        '<div><span>ALCANCE</span><b>' + (Math.round(((stats.rngSqEff != null ? stats.rngSqEff : stats.rng / 44)) * 10) / 10) + '□</b></div>' +
         '<div><span>CADÊNCIA</span><b>' + (stats.rate ? stats.rate.toFixed(2) + '/s' : '\u2014') + '</b></div>' +
         '<div><span>DPS</span><b>' + Math.round(computeDps(t)) + '</b></div>';
       this.el('tp-target').textContent = '\u25C8 ' + t.targetMode;
       const specBox = this.el('tp-specs');
-      specBox.innerHTML = '';
-      if (t.specBranch) {
-        const sp = t.specBranch === 'A' ? def.specA : def.specB;
-        specBox.innerHTML = '<div class="spec-chosen"><b>NV4\u25B8' + t.specBranch + ':</b> ' + sp.name + ' \u2014 ' + sp.desc + '</div>';
-      } else if (t.level >= 4) {
-        ['A', 'B'].forEach(br => {
-          const sp = br === 'A' ? def.specA : def.specB;
-          const btn = document.createElement('button');
-          btn.className = 'btn small spec-btn';
-          btn.innerHTML = '<b>\u25B8' + br + ' ' + sp.name + '</b><br><span>' + sp.desc + '</span>';
-          btn.addEventListener('click', () => { setSpec(this.S, t, br); this.showTowerPanel(t); });
-          specBox.appendChild(btn);
-        });
-      } else {
-        specBox.innerHTML = '<div class="spec-chosen tt-muted">Especializações desbloqueiam no nível 4.</div>';
+      // E11/FIX: a assinatura pertence ao DOM compartilhado (dataset), não à torre.
+      // Guardar em t._specSig mentia ao alternar A→B→A: o memo de A continuava válido,
+      // mas o innerHTML era o de B (listeners apontando para a torre errada).
+      const specSig = (t.tid != null ? t.tid : '') + '|' + def.id + '|' + t.level + '|' + (t.specBranch || '');
+      if (specBox.dataset.sig !== specSig) {
+        specBox.dataset.sig = specSig;
+        specBox.dataset.tid = String(t.tid != null ? t.tid : '');
+        specBox.innerHTML = '';
+        if (t.specBranch) {
+          const sp = t.specBranch === 'A' ? def.specA : def.specB;
+          specBox.innerHTML = '<div class="spec-chosen"><b>NV4\u25B8' + t.specBranch + ':</b> ' + sp.name + ' \u2014 ' + sp.desc + '</div>';
+        } else if (t.level >= 4) {
+          ['A', 'B'].forEach(br => {
+            const sp = br === 'A' ? def.specA : def.specB;
+            const btn = document.createElement('button');
+            btn.className = 'btn small spec-btn';
+            btn.innerHTML = '<b>\u25B8' + br + ' ' + sp.name + '</b><br><span>' + sp.desc + '</span>';
+            btn.addEventListener('click', () => { setSpec(this.S, t, br); this.showTowerPanel(t); });
+            specBox.appendChild(btn);
+          });
+        } else {
+          specBox.innerHTML = '<div class="spec-chosen tt-muted">Especializações desbloqueiam no nível 4.</div>';
+        }
       }
       const up = this.el('tp-upgrade');
       const mergeBuy = this.el('tp-merge-buy');
@@ -817,13 +894,14 @@
         const pd = this.placingId === 'station' ? D.STATION_DATA : D.SUPPORT_DATA;
         const hc = this.hoverCell;
         if (pd && hc.c >= 0 && hc.c < COLS && hc.r >= 0 && hc.r < ROWS) {
-          cx = hc.c * CELL + CELL / 2; cy = hc.r * CELL + CELL / 2; rad = pd.supplyRadius;
+          cx = hc.c * CELL + CELL / 2; cy = hc.r * CELL + CELL / 2; rad = (pd.supplySq != null ? pd.supplySq * CELL : pd.supplyRadius);
         }
       } else if (this.selected && this.selected.defRef) {
         const sd = this.selected.defRef;
         if (sd.kind === 'station' || sd.kind === 'support' || sd.id === 'station' || sd.id === 'support') {
-          rad = (sd.supplyRadius != null ? sd.supplyRadius
-            : (sd.id === 'station' ? D.STATION_DATA.supplyRadius : D.SUPPORT_DATA.supplyRadius));
+          rad = (sd.supplySq != null ? sd.supplySq * CELL
+            : (sd.supplyRadius != null ? sd.supplyRadius
+            : (sd.id === 'station' ? (D.STATION_DATA.supplySq != null ? D.STATION_DATA.supplySq * CELL : D.STATION_DATA.supplyRadius) : (D.SUPPORT_DATA.supplySq != null ? D.SUPPORT_DATA.supplySq * CELL : D.SUPPORT_DATA.supplyRadius))));
           cx = this.selected.x; cy = this.selected.y;
         }
       }
@@ -865,6 +943,10 @@
         '<div><span>MODO</span><b style="color:var(--muted)">industrial</b></div>';
       el('tp-target').textContent = '◇ SEM ALVO';
       const specBox = el('tp-specs');
+      // FIX: painel da fábrica sobrescreve o DOM de #tp-specs; sem marcar a assinatura o
+      // showTowerPanel de uma torre anterior pularia o rebuild e as specs não voltariam.
+      specBox.dataset.sig = 'factory';
+      specBox.dataset.tid = String(t.tid != null ? t.tid : '');
       specBox.innerHTML = '<div class="spec-chosen tt-muted">Prédio industrial: paga a conta com peças ⚙ para FUNDIR torres e ligar o laboratório Hivemind.</div>';
       el('tp-merge-buy').classList.add('hidden');
       const up = el('tp-upgrade');
@@ -952,6 +1034,157 @@
       return this.S.showDmgNum;
     }
 
+    /* ---------- TU-TUTO: coach marks da 1ª partida (overlay nunca bloqueia o jogo) ---------- */
+    _tutSteps() {
+      return [
+        { text: 'Torres atiram sozinhas — compre uma na loja', sel: '#shopbar', alt: null },
+        { text: 'Tiros gastam MUNIÇÃO e BATERIA', sel: '#tower-panel:not(.hidden) #res-bars', alt: '#shopbar' },
+        { text: 'FÁBRICA acelera a recarga de tudo', sel: '#shopbar .shop-card[data-id="factory"]', alt: '#shopbar' },
+        { text: 'ESTAÇÃO e APOIO são pit stops — posicione perto das torres', sel: '#shopbar .shop-card[data-id="station"]', alt: '#shopbar' },
+        { text: 'Upgrades agora são COMPONENTES: Arma/Motor/Reator/Mira', sel: '#tower-panel:not(.hidden) #comp-rows', alt: null },
+        { text: 'Aperte ▶ ONDA para começar (Espaço pausa)', sel: null, alt: null }
+      ];
+    }
+
+    _tutBindButtons() {
+      // botoes estaticos do overlay: cloneNode descarta listeners de creates anteriores (padrao U2.1)
+      const _on2 = (id, fn) => {
+        const old = document.getElementById(id);
+        if (!old || !old.parentNode) return;
+        const fresh = old.cloneNode(true);
+        old.parentNode.replaceChild(fresh, old);
+        fresh.addEventListener('click', fn);
+      };
+      _on2('tut-next', () => { try { SND.ui(); } catch (e) {} this._tutNext(); });
+      _on2('tut-skip', () => { try { SND.ui(); } catch (e2) {} this._tutFinish(); });
+      if (!window.__tutResizeBound) {
+        window.__tutResizeBound = true;
+        window.addEventListener('resize', () => {
+          try {
+            const sc = window.__game && window.__game.scene.getScene('Game');
+            if (sc && sc._tutActive) sc._tutPlace();
+          } catch (e3) {}
+        });
+      }
+    }
+
+    _tutVisibleEl(sel) {
+      if (!sel) return null;
+      let n = null;
+      try { n = document.querySelector(sel); } catch (e) { return null; }
+      if (!n) return null;
+      try {
+        const r = n.getBoundingClientRect();
+        const cs = window.getComputedStyle(n);
+        if (r.width < 2 || r.height < 2 || cs.display === 'none' || cs.visibility === 'hidden') return null;
+      } catch (e2) { return null; }
+      return n;
+    }
+
+    _tutWaveBtn() {
+      // desktop #btn-nextwave x mobile #btn-nextwave-mobile: usa o visivel
+      return this._tutVisibleEl('#btn-nextwave-mobile') || this._tutVisibleEl('#btn-nextwave');
+    }
+
+    _tutTarget(i) {
+      const steps = this._tutSteps();
+      const st = steps[i];
+      if (!st) return null;
+      if (i === 5) return this._tutWaveBtn();
+      return this._tutVisibleEl(st.sel) || (st.alt ? this._tutVisibleEl(st.alt) : null);
+    }
+
+    _tutStart(force) {
+      if (this._tutActive) return;
+      if (!force && D.Save && D.Save.data && D.Save.data.tutorialSeen) return;
+      this._tutActive = true;
+      this._tutIdx = 0;
+      const ov = document.getElementById('tut-overlay');
+      if (ov) { ov.classList.remove('hidden'); ov.setAttribute('aria-hidden', 'false'); }
+      this._tutShow();
+    }
+
+    _tutShow() {
+      const steps = this._tutSteps();
+      const i = this._tutIdx;
+      const st = steps[i];
+      if (!st) { this._tutFinish(); return; }
+      const stepEl = document.getElementById('tut-step');
+      const txtEl = document.getElementById('tut-text');
+      const bub = document.getElementById('tut-bubble');
+      if (stepEl) stepEl.textContent = 'PASSO ' + (i + 1) + '/' + steps.length;
+      if (txtEl) txtEl.textContent = st.text;
+      const nx = document.getElementById('tut-next');
+      if (nx) nx.textContent = (i === steps.length - 1) ? 'COMEÇAR ▶' : 'PRÓXIMO ▸';
+      if (bub) bub.classList.remove('hidden');
+      this._tutPlace();
+    }
+
+    _tutPlace() {
+      const ring = document.getElementById('tut-ring');
+      const bub = document.getElementById('tut-bubble');
+      if (!ring || !bub) return;
+      const tgt = this._tutTarget(this._tutIdx);
+      const M = 12, PAD = 6;
+      if (tgt) {
+        const r = tgt.getBoundingClientRect();
+        ring.classList.remove('hidden');
+        ring.style.left = Math.max(4, r.left - PAD) + 'px';
+        ring.style.top = Math.max(4, r.top - PAD) + 'px';
+        ring.style.width = (r.width + PAD * 2) + 'px';
+        ring.style.height = (r.height + PAD * 2) + 'px';
+        const bw = Math.min(320, window.innerWidth - M * 2);
+        bub.style.maxWidth = bw + 'px';
+        bub.style.left = '0px'; bub.style.top = '0px';
+        const bh = bub.offsetHeight || 150;
+        let top = r.bottom + 10;
+        if (top + bh > window.innerHeight - M) top = r.top - bh - 10;
+        if (top < M) top = Math.min(window.innerHeight - bh - M, r.bottom + 10);
+        if (top < M) top = M;
+        const left = Math.min(Math.max(M, r.left), window.innerWidth - bw - M);
+        bub.style.left = left + 'px';
+        bub.style.top = Math.max(M, top) + 'px';
+      } else {
+        // alvo oculto (ex.: #comp-rows com painel fechado): bolha centralizada, sem anel
+        ring.classList.add('hidden');
+        const bw = Math.min(320, window.innerWidth - M * 2);
+        bub.style.maxWidth = bw + 'px';
+        bub.style.left = '0px'; bub.style.top = '0px';
+        const bh = bub.offsetHeight || 150;
+        bub.style.left = Math.max(M, (window.innerWidth - bw) / 2) + 'px';
+        bub.style.top = Math.max(M, (window.innerHeight - bh) / 2) + 'px';
+      }
+    }
+
+    _tutNext() {
+      if (!this._tutActive) return;
+      this._tutIdx += 1;
+      if (this._tutIdx >= this._tutSteps().length) this._tutFinish();
+      else this._tutShow();
+    }
+
+    _tutFinish() {
+      try {
+        if (D.Save) {
+          if (!D.Save.data) D.Save.load();
+          D.Save.data.tutorialSeen = true;
+          D.Save.save();
+        }
+      } catch (e) {}
+      this._tutHide();
+    }
+
+    _tutHide() {
+      this._tutActive = false;
+      this._tutIdx = -1;
+      const ov = document.getElementById('tut-overlay');
+      if (ov) { ov.classList.add('hidden'); ov.setAttribute('aria-hidden', 'true'); }
+      const ring = document.getElementById('tut-ring');
+      if (ring) ring.classList.add('hidden');
+      const bub = document.getElementById('tut-bubble');
+      if (bub) bub.classList.add('hidden');
+    }
+
     /* ---------- input ---------- */
     bindInput() {
       // U2.1 (dedupe Phaser): a instancia da cena e reutilizada entre sessoes;
@@ -979,7 +1212,7 @@
         if (this.placingId) {
           const t = placeTower(this.S, c, r, this.placingId);
           // M1 (brief 09): pos-compra limpa selecao e esconde o painel (unico p/ desktop+mobile)
-          if (t) { this.placingId = null; this.selected = null; this.refreshShopSel(); this.hideTowerPanel(); try { if (typeof hideTip === 'function') hideTip(); } catch (_e2) {} }
+          if (t) { this.placingId = null; this.selected = null; this.refreshShopSel(); this.hideTowerPanel(); try { if (typeof hideTip === 'function') hideTip(); } catch (_e2) {} try { if (this._tutActive && this._tutIdx === 0) this._tutNext(); } catch (_eT) {} }
           return;
         }
         const key = c + ',' + r;
@@ -1003,7 +1236,12 @@
       kb.on('keydown-P', () => this.togglePause());
       kb.on('keydown-ESC', () => { if (this.placingId) { this.placingId = null; this.refreshShopSel(); } else this.togglePause(); });
       // ESPAÇO = exclusivamente play/pause (próxima onda só pelo botão ▶ ONDA)
-      kb.on('keydown-SPACE', () => { this.togglePause(); });
+      // Onda 3: preventDefault evita ativação do botão focado (pause duplo) e repeat não alterna em rajada
+      kb.on('keydown-SPACE', (e) => {
+        if (e && e.repeat) return;
+        if (e && e.preventDefault) e.preventDefault();
+        this.togglePause();
+      });
       kb.on('keydown-F', () => this.cycleSpeed());
       // M handled globally
 
@@ -1024,12 +1262,19 @@
       if (_amBtn) _amBtn.addEventListener('click', () => { toggleAutoMove(this.S); SND.ui(); });
       _on('btn-pause', 'click', () => this.togglePause());
       // próxima onda pelo botão (desktop #btn-nextwave + mobile #btn-nextwave-mobile)
-      const nextWaveGo = () => { if (this.S.state === 'idle') { SND.ui(); startNextWave(this.S); } else { SND.error(); } };
+      const nextWaveGo = () => {
+        if (this.S.state === 'idle') {
+          SND.ui(); startNextWave(this.S);
+          try { if (this._tutActive && this._tutIdx === 5) this._tutFinish(); } catch (_eT2) {}
+        } else { SND.error(); }
+      };
       ['btn-nextwave', 'btn-nextwave-mobile'].forEach(id => {
         _on(id, 'click', nextWaveGo);
       });
       // mute handled globally (HTML) to avoid double toggle
       _on('btn-home', 'click', () => { SND.uiBack(); this.goMenu(); });
+      // TU-TUTO: "?" reabre o guia a qualquer hora (dedupe via _freshBtn como os demais)
+      _on('btn-help', 'click', () => { SND.ui(); this._tutStart(true); });
       // V12-js: toggle numeros de dano (default ON; OFF esconde floats de dano, mantem gold/avisos)
       {
         const dmgBtn = this._freshBtn('btn-dmgnum');
@@ -1046,6 +1291,13 @@
       // antigos dos filhos junto; os binds abaixo religam exatamente 1x cada.
       // (Ordem importa: clonar depois apagaria os binds recem-feitos.)
       const _tp = this._freshBtn('tower-panel');
+      // FIX: cloneNode copia atributos (data-sig/data-tid); sem limpar, o 1º
+      // showTowerPanel da nova sessão poderia pular o rebuild e deixar os
+      // botões de spec clonados (sem listeners).
+      try {
+        const _specFresh = document.getElementById('tp-specs');
+        if (_specFresh) { delete _specFresh.dataset.sig; delete _specFresh.dataset.tid; }
+      } catch (eSpecR) {}
       _on('tp-upgrade', 'click', () => {
         if (!this.selected) return;
         const t = this.selected;
@@ -1062,19 +1314,8 @@
       _on('tp-sell', 'click', () => { if (this.selected) { sellTower(this.S, this.selected); this.selected = null; this.hideTowerPanel(); } });
       _on('tp-target', 'click', () => { if (this.selected) { cycleTargetMode(this.selected); this.showTowerPanel(this.selected); } });
       _on('tp-close', 'click', () => { this.selected = null; this.hideTowerPanel(); });
-      // BUG 2 FIX: tap/click on tower-panel background (not on a button) closes panel
-      if (_tp) {
-        _tp.addEventListener('pointerdown', function(e) {
-          // only close if tapped directly on panel bg or non-interactive child, NOT on a button
-          if (e.target.closest('button') || e.target.closest('.spec-btn')) return;
-          // defer so existing button click handlers still fire
-          var self2 = this;
-          setTimeout(function() {
-            var sc = window.__game && window.__game.scene.getScene('Game');
-            if (sc) { sc.selected = null; sc.hideTowerPanel(); }
-          }, 60);
-        });
-      }
+      // Onda 3 (BUG 2): tocar/rolar DENTRO do painel não fecha mais (inclusive summary/scroll).
+      // O fechamento por toque fora continua no tap-to-dismiss global abaixo (ignora #tower-panel).
       // M2 (brief 09): tap-to-dismiss — toque fora do painel/board fecha o painel.
       // Ignora toques no canvas (Phaser ja trata: cela vazia fecha, torre abre),
       // dentro do painel e em modais.
@@ -1091,6 +1332,38 @@
         }, { passive: true });
       }
       this._tapDismissBound = true;
+      // Onda 3: tooltip pinado (toque) fecha ao tocar FORA do card que o fixou;
+      // nunca intercepta cliques de modal (modais ficam acima do tooltip: z-index 50 > 49).
+      if (!window.__tdTipDismissBound) {
+        window.__tdTipDismissBound = true;
+        document.addEventListener('pointerdown', (e) => {
+          const t = e.target;
+          if (!t || !t.closest) return;
+          if (t.closest('.modal') || t.closest('#tooltip')) return;
+          const tip = document.getElementById('tooltip');
+          if (!tip || tip.classList.contains('hidden')) return;
+          const pin = tip._pinFor;
+          if (pin && (t === pin || (pin.contains && pin.contains(t)))) return;
+          hideTip();
+        }, { passive: true });
+      }
+      // Onda 3: qualquer modal aberto (ex.: mutação via scenes.js) esconde o tooltip pinado
+      if (!window.__tdTipModalWatch) {
+        window.__tdTipModalWatch = true;
+        try {
+          const _tipModals = ['modal-mut', 'modal-lab', 'modal-codex', 'modal-ach', 'pause-overlay', 'modal-end'];
+          const _tipModalCheck = () => {
+            for (const _id of _tipModals) {
+              const _m = document.getElementById(_id);
+              if (_m && !_m.classList.contains('hidden')) { hideTip(); return; }
+            }
+          };
+          _tipModals.forEach(_id => {
+            const _m = document.getElementById(_id);
+            if (_m && typeof MutationObserver !== 'undefined') new MutationObserver(_tipModalCheck).observe(_m, { attributes: true, attributeFilter: ['class'] });
+          });
+        } catch (eTipM) {}
+      }
       ['modal-end'].forEach(id => {
         const b = this._freshBtn('btn-retry');
         if (b) b.addEventListener('click', () => { SND.ui(); this.restartSame(); });
@@ -1101,12 +1374,6 @@
       });
     }
 
-    toggleMute() {
-      const muted = !SND.muted;
-      SND.setMuted(muted);
-      D.Save.data.muted = muted; D.Save.save();
-      SND.ui();
-    }
 
     cycleSpeed() {
       this.speedIdx = (this.speedIdx + 1) % this.speeds.length;
@@ -1118,6 +1385,13 @@
       this.paused = !this.paused;
       const ov = this.el('pause-overlay');
       if (ov) ov.classList.toggle('hidden', !this.paused);
+      // Onda 5: laser contínuo silencia na pausa; tweens (FX ambientais + combate) congelam juntos
+      if (this.paused) {
+        try { SND.laserStopAll(); } catch (eP1) {}
+        try { this.tweens.pauseAll(); } catch (eP2) {}
+      } else {
+        try { this.tweens.resumeAll(); } catch (eP3) {}
+      }
       SND.musicTick(this.paused ? 'paused' : 'combat', this.S.wave, !!this.S.activeBoss);
       SND.uiBack();
     }
@@ -1185,6 +1459,19 @@
       this.syncBossBar();
       if (this.selected && !this.S.towers.includes(this.selected)) { this.selected = null; this.hideTowerPanel(); }
       this.pollFloats(effDt);
+      // Onda 3: auto-avanço do tutorial ao construir a 1ª torre. O override de bindInput em
+      // scenes.js descarta o hook original do pointerdown; o contador abaixo dispara o _tutNext
+      // independentemente de qual handler colocou a torre (clique real ou API de teste).
+      try {
+        const tc = this.S.towers.length;
+        if (this._tutTowerCount === undefined) this._tutTowerCount = tc;
+        else if (tc > this._tutTowerCount) {
+          this._tutTowerCount = tc;
+          if (this._tutActive && this._tutIdx === 0) this._tutNext();
+        } else if (tc < this._tutTowerCount) {
+          this._tutTowerCount = tc;
+        }
+      } catch (eTT) {}
     }
 
     /* v3 PIXEL FASES 2-6: helpers de teste headless */
@@ -1197,7 +1484,7 @@
 
     handleEvent(e) {
       switch (e.t) {
-        case 'boom': this.boomFx(e.x, e.y, e.r, e.col, e.big); break;
+        case 'boom': this.boomFx(e.x, e.y, e.r, this.warmBoomCol(), e.big); break;
         case 'ring': {
           const ringArr2 = this.pools['ring'];
           if (ringArr2) { let a=0; for(const im of ringArr2) if(im.active) a++; if(a>10) break; }
@@ -1324,9 +1611,8 @@
 
     updateParticles(dt) {
       if (dt <= 0) return;
-      // conta total ativo para acelerar fade quando poluído (onda 48 x4)
-      let totalActive = 0;
-      for (const k in this.pools) for (const im of this.pools[k]) if (im.active) totalActive++;
+      // E5: total vem do contador (antes: varredura O(pool) todo frame)
+      const totalActive = this._poolTotal || 0;
       const over = totalActive > 60 ? Math.min(2.5, (totalActive - 60) / 30) : 0; // 60→0, 90→1, 120→2
       const dtEff = dt * (1 + over * 1.6); // acelera sumiço quando poluído
       for (const key in this.pools) {
@@ -1336,7 +1622,7 @@
           if (life == null) continue;
           life -= dtEff;
           img.setData('life', life);
-          if (life <= 0) { img.setActive(false).setVisible(false).setAlpha(1).setScale(1); continue; }
+          if (life <= 0) { this._freeImg(key, img); img.setAlpha(1).setScale(1); continue; }
           const vx = img.getData('vx') || 0, vy = img.getData('vy') || 0;
           img.x += vx * dt; img.y += vy * dt;
           const tot = img.getData('tot') || 1;
@@ -1351,7 +1637,7 @@
           }
           // hard cap: se total >110, força expiração dos mais antigos
           if (totalActive > 110 && life < tot*0.35) {
-            img.setActive(false).setVisible(false);
+            this._freeImg(key, img);
           }
         }
       }
@@ -1463,6 +1749,7 @@
       ui.clear();
       if (this.selected) {
         const st = getTowerStats(this.S, this.selected);
+        // RANGESQ: raio = rngSqEff×CELL (st.rng já é squares×CELL)
         ui.lineStyle(1.6, 0x38bdf8, 0.65);
         ui.strokeCircle(this.selected.x, this.selected.y, st.rng);
         ui.fillStyle(0x38bdf8, 0.05);
@@ -1470,11 +1757,13 @@
         ui.lineStyle(1.4, 0xfbbf24, 0.9);
         ui.strokeRect(this.selected.c * CELL + 2, this.selected.r * CELL + 2, CELL - 4, CELL - 4);
         // F4-comp U1: anel de suprimento âmbar ao selecionar station/support
+        // RANGESQ: anel = supplySq×CELL
         try {
           const _sd = this.selected.defRef || {};
-          const _sr = (_sd.supplyRadius != null ? _sd.supplyRadius
-            : (_sd.id === 'station' && D.STATION_DATA ? D.STATION_DATA.supplyRadius
-            : (_sd.id === 'support' && D.SUPPORT_DATA ? D.SUPPORT_DATA.supplyRadius : 0)));
+          const _sr = (_sd.supplySq != null ? _sd.supplySq * CELL
+            : (_sd.supplyRadius != null ? _sd.supplyRadius
+            : (_sd.id === 'station' && D.STATION_DATA ? (D.STATION_DATA.supplySq != null ? D.STATION_DATA.supplySq * CELL : D.STATION_DATA.supplyRadius)
+            : (_sd.id === 'support' && D.SUPPORT_DATA ? (D.SUPPORT_DATA.supplySq != null ? D.SUPPORT_DATA.supplySq * CELL : D.SUPPORT_DATA.supplyRadius) : 0))));
           if (_sr > 0) {
             ui.lineStyle(1.4, 0xf5a83d, 0.7);
             ui.strokeCircle(this.selected.x, this.selected.y, _sr);
@@ -1493,16 +1782,19 @@
           const colr = okCell ? 0x34d399 : 0xf43f5e;
           ui.lineStyle(1.6, colr, 0.95);
           ui.strokeRect(c * CELL + 2, r * CELL + 2, CELL - 4, CELL - 4);
-          if (def.rng) {
+          // RANGESQ: fantasma usa rngSq×CELL e supplySq×CELL
+          var _ghostRng = (def.rngSq != null ? def.rngSq * CELL : def.rng);
+          if (_ghostRng) {
             ui.lineStyle(1.4, colr, 0.55);
-            ui.strokeCircle(cx, cy, def.rng);
+            ui.strokeCircle(cx, cy, _ghostRng);
           }
           // F4-comp U1: fantasma de station/support mostra o anel de suprimento
-          if (def.supplyRadius) {
+          var _ghostSup = (def.supplySq != null ? def.supplySq * CELL : def.supplyRadius);
+          if (_ghostSup) {
             ui.lineStyle(1.4, 0xf5a83d, 0.7);
-            ui.strokeCircle(cx, cy, def.supplyRadius);
+            ui.strokeCircle(cx, cy, _ghostSup);
             ui.fillStyle(0xf5a83d, 0.04);
-            ui.fillCircle(cx, cy, def.supplyRadius);
+            ui.fillCircle(cx, cy, _ghostSup);
           }
           if (!okCell) { ui.fillStyle(0xf43f5e, 0.08); ui.fillCircle(cx, cy, CELL / 2); }
         }
@@ -1598,17 +1890,15 @@
           if (v && v.lastTexKey !== tkey && this.textures.exists(tkey)) { v.tur.setTexture(tkey); v.lastTexKey = tkey; }
         }
         if (!v) {
-          const base = this.add.image(t.x, t.y, 'tbase').setVisible(false).setAlpha(0); // borda removida
           const tur = this.add.image(t.x, t.y, this.textures.exists(tkey) ? tkey : 'dot');
           const pips = this.add.container(t.x, t.y + 15);
-          base.setDepth(30); tur.setDepth(31); pips.setDepth(32);
-          v = { base, tur, pips, lastLevel: t.level };
+          tur.setDepth(31); pips.setDepth(32);
+          v = { tur, pips, lastLevel: t.level };
           v.lastTexKey = this.textures.exists(tkey) ? tkey : null; // v3 PIXEL
           v.tur.baseScale = [1, 1, 1.08, 1.18, 1.30, 1.45][D.getTier(t.level)] || 1;
           this.towerViews[t.tid] = v;
           this.buildPips(v, t);
         }
-        v.base.setPosition(t.x, t.y);
         v.tur.setPosition(t.x, t.y);
         v.pips.setPosition(t.x, t.y+15);
         if(v.ultraGlow) v.ultraGlow.setPosition(t.x, t.y);
@@ -1659,7 +1949,6 @@
         const stillExists = this.S.towers.some(t => String(t.tid) === String(tid));
         if (!stillExists) {
           const v = this.towerViews[tid];
-          try{ if(v.base) v.base.destroy(); }catch(e){}
           try{ if(v.tur) v.tur.destroy(); }catch(e){}
           try{ if(v.pips) v.pips.destroy(true); }catch(e){}
           try{ if(v.ultraGlow) v.ultraGlow.destroy(); }catch(e){}
@@ -1766,7 +2055,7 @@
       }
       setT('hud-wave-num', String(Math.max(1, S.wave)));
       setT('hud-wave-num2', String(Math.max(1, S.wave)));
-      setT('hud-wave-total', '/ ' + (S.endless ? '\\u221E' : S.map.waves.length));
+      setT('hud-wave-total', '/ ' + (S.endless ? '∞' : S.map.waves.length));
       if (S.state === 'combat') {
         if (this._lastWave !== S.wave) { this._lastWave = S.wave; this._waveTotal = Math.max(1, S.waveQueue.length); }
         const pct = Math.round(100 * (1 - S.waveQueue.length / this._waveTotal));
@@ -1814,7 +2103,7 @@
           H.v._moreCombat = -1;
         }
       }
-      setT('btn-speed', '\\u00D7' + this.speeds[this.speedIdx]);
+      setT('btn-speed', '×' + this.speeds[this.speedIdx]);
       if (H.v._auto !== !!S.autoNext) { H.v._auto = !!S.autoNext; el('btn-auto').classList.toggle('active', !!S.autoNext); }
       // G10: estado visual do toggle de auto-movimento (A8: só quando muda)
       {
@@ -1828,7 +2117,7 @@
       if (H.v._mute !== !!SND.muted) {
         H.v._mute = !!SND.muted;
         el('btn-mute').classList.toggle('active', !!SND.muted);
-        el('btn-mute').textContent = SND.muted ? '\\u2716\\ud83d\\udd08' : '\\ud83d\\udd08';
+        el('btn-mute').textContent = SND.muted ? '✖🔇' : '🔊';
       }
       Object.keys(D.SUPERS).forEach(k => {
         const btn = el('super-' + k);
@@ -1857,10 +2146,17 @@
     }
 
     syncNextPreview() {
+      // E4/FIX: peekNextWave 1x por onda — em sessão sem próxima onda o cache de
+      // conteúdo nunca era preenchido e o peek rodava a cada frame. O guard de onda
+      // agora é incondicional e a chave é sempre atribuída antes da comparação.
+      const _preKey = this.S.wave + '|' + (this.S.endless ? 1 : 0);
+      if (this._prevPreviewWave === _preKey) return;
+      this._prevPreviewWave = _preKey;
       const peek = peekNextWave(this.S);
       const key = peek ? peek.map(p => p.type + p.count).join('|') : '';
-      if (key === (this._prevPreviewKey || '')) return;
+      const prevKey = this._prevPreviewKey;
       this._prevPreviewKey = key;
+      if (key === prevKey) return;
       const box = document.getElementById('next-preview');
       box.innerHTML = '';
       if (!peek) return;
@@ -1950,6 +2246,8 @@
     showEndModal() {
       const res = this.S.result;
       if (!res) return;
+      // Onda 5: fim de jogo não pode deixar laser contínuo soando
+      try { SND.laserStopAll(); } catch (eL) {}
       const victory = res.outcome === 'victory';
       // Brief 07 A11: trilha do resultado ao abrir o modal (finalizeEnd já definiu; idempotente).
       // Brief 07 A2: cascata star(i) com delay por estrela já existe abaixo (400+i*420ms).

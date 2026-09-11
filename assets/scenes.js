@@ -1,4 +1,4 @@
-/* Defesa Orbital v3 - scenes.js (Brief 08 A5: extracao mecanica de assets/scenes.js, cola: patches _orig/ULTRA 4175-4490 + 4515-4701 + MetalSlug/menu/boot/DO 6518-6852) */
+/* Defesa Orbital v3 - scenes.js (Brief 08 A5: extracao mecanica de assets/scenes.js, cola: patches _orig/ULTRA 4175-4490 + 4515-4701) */
 /* REGRA DE OURO (A5): comportamento identico. Linhas movidas byte-exatas; ordem relativa preservada. */
 'use strict';
   /* ================= ULTRA VISUAL PATCH ================= */
@@ -27,7 +27,7 @@
     };
     mk('glow', 64, g=>{ for(let i=3;i>=0;i--){ g.fillStyle(0xffffff, 0.07+ i*0.08); g.fillCircle(32,32, 28 - i*6); } });
     mk('flare', 48, g=>{ g.fillStyle(0xffffff,1); g.fillCircle(24,24,3); for(let r=8;r<24;r+=4){ g.fillStyle(0xffffff, 0.15 - r*0.005); g.fillCircle(24,24,r); } g.fillStyle(0xffffff,0.9); g.fillRect(0,23,48,2); g.fillRect(23,0,2,48); });
-    mk('trail', 16, g=>{ g.fillStyle(0xffffff,1); g.fillCircle(8,8,5); g.fillStyle(0xffffff,0.4); g.fillCircle(8,8,8); });
+    // ONDA 5: textura 'trail' removida (órfã, sem consumidores — rg confirmou)
     mk('shock', 80, g=>{ g.lineStyle(2,0xffffff,1); g.strokeCircle(40,40,36); g.lineStyle(1,0xffffff,0.5); g.strokeCircle(40,40,30); });
   };
   const _origBuildStatic = GameScene.prototype.buildStatic;
@@ -79,9 +79,13 @@
   const _origSyncEnemies = GameScene.prototype.syncEnemies;
   GameScene.prototype.syncEnemies = function(){
     _origSyncEnemies.call(this);
+    // ONDA 4 (perf): eid→entidade num Map reutilizado (O(n)/frame). Antes: find() O(n) por view = O(n²).
+    const em = this._enemyEntMap || (this._enemyEntMap = new Map());
+    em.clear();
+    for(let i=0;i<this.S.enemies.length;i++){ const en=this.S.enemies[i]; em.set(String(en.eid), en); }
     for(const eid in this.enemyViews){
       const v = this.enemyViews[eid];
-      const e = this.S.enemies.find(en=> String(en.eid)===eid);
+      const e = em.get(eid);
       if(!e) continue;
       if(e.flying && !v.exhaust){
         v.exhaust = this.add.image(0,0,'soft').setTint(0x38bdf8).setScale(0.55).setAlpha(0.45).setDepth(35);
@@ -109,22 +113,28 @@
   const _origSyncTowers = GameScene.prototype.syncTowers;
   GameScene.prototype.syncTowers = function(){
     _origSyncTowers.call(this);
+    // ONDA 4 (perf): tid→torre num Map reutilizado (O(n)/frame). Antes: find() O(n) por view = O(n²).
+    const tm = this._towerEntMap || (this._towerEntMap = new Map());
+    tm.clear();
+    for(let i=0;i<this.S.towers.length;i++){ const tt=this.S.towers[i]; tm.set(String(tt.tid), tt); }
     for(const tid in this.towerViews){
       const v = this.towerViews[tid];
-      const t = this.S.towers.find(tt=> String(tt.tid)===tid);
+      const t = tm.get(tid);
       if(!t) continue;
       if(t.level>=4 && !v.ultraGlow){
-        v.ultraGlow = this.add.image(v.base.x, v.base.y, 'glow').setTint(Phaser.Display.Color.HexStringToColor(t.defRef.color).color).setScale(1.7 + Math.min(t.level,30)*0.04).setAlpha(0.16).setDepth(29);
+        v.ultraGlow = this.add.image(v.tur.x, v.tur.y, 'glow').setTint(Phaser.Display.Color.HexStringToColor(t.defRef.color).color).setScale(1.7 + Math.min(t.level,30)*0.04).setAlpha(0.16).setDepth(29);
       }
       if(v.ultraGlow) {
-        v.ultraGlow.setPosition(v.base.x, v.base.y);
+        v.ultraGlow.setPosition(v.tur.x, v.tur.y);
         v.ultraGlow.setAlpha(0.12 + Math.sin(this.S.time*2 + t.tid)*0.06 + t.level*0.02);
         v.ultraGlow.setScale(1.7 + Math.min(t.level,30)*0.035 + Math.sin(this.S.time*1.2)*0.06);
       }
       if(this.S.powers && this.S.powers.overdrive && this.S.powers.overdrive.dur>0){
         if(!v.odFlame){ v.odFlame = this.add.image(v.tur.x, v.tur.y, 'soft').setTint(0xfb923c).setScale(0.9).setAlpha(0.0).setDepth(32); }
         v.odFlame.setPosition(v.tur.x, v.tur.y); v.odFlame.setAlpha(0.35 + Math.random()*0.2); v.odFlame.setScale(0.8 + Math.random()*0.4);
-      } else if(v.odFlame){ v.odFlame.setAlpha(0); }
+      } else if(v.odFlame){ // ONDA 5: overdrive terminou — destrói (antes só setAlpha(0) e ficava preso na cena)
+        v.odFlame.destroy(); v.odFlame = null;
+      }
     }
   };
   const _origSyncProjectiles = GameScene.prototype.syncProjectiles;
@@ -316,7 +326,7 @@
     this.tweens.add({ targets:planet, scale:9.6, duration:3200, yoyo:true, repeat:-1, ease:'Sine.easeInOut' });
   };
 
-  /* ================= TEMA: NAVES MÓVEIS + TERRA + SISTEMA SOLAR + SHMUP ================= */
+  /* ================= TEMA: NAVES MÓVEIS + TERRA + SISTEMA SOLAR ================= */
 
   /* ---- A5: patches (orig scenes.js 4515-4701; moveTower 4491-4514 e TASK6 4703-4725 vivem em sim.js) ---- */
   // export (adiado)
@@ -343,7 +353,8 @@
   const _origMakeTextures2 = makeTextures;
   makeTextures = function(scene){
     _origMakeTextures2(scene);
-    if(scene.textures.exists('earth')) try{ scene.textures.remove('earth'); }catch(e){}
+    // ONDA 4: textura determinística — só gera se faltar (Boot→Menu→Game não regenera)
+    if(scene.textures.exists('earth')) return;
     const g = scene.make.graphics({x:0,y:0,add:false});
     // Terra pixel art 96x96: oceano azul profundo + continentes verdes + deserto + gelo + nuvens + brilho atmosférico
     g.fillStyle(0x0f1a3a,1); g.fillCircle(48,48,42);
@@ -365,10 +376,10 @@
     g.lineStyle(1,0xffffff,0.22); g.strokeCircle(48,48,38);
     // brilho specular
     g.fillStyle(0xffffff,0.18); g.fillCircle(32,32,18);
+    // ONDA 5 (SUNSET/pixel art): contorno preto de 1px lógico por fora da atmosfera, sem redesenhar a identidade
+    g.lineStyle(2,0x000000,1); g.strokeCircle(48,48,46);
     g.generateTexture('earth',96,96); g.destroy();
-    const h = scene.make.graphics({x:0,y:0,add:false});
-    h.fillStyle(0xffffff,1); h.fillCircle(4,4,3);
-    h.generateTexture('star2',8,8); h.destroy();
+    // ONDA 5: textura 'star2' removida (órfã, sem consumidores — rg confirmou)
   };
 
   // Patch GameScene buildStatic to use Earth
@@ -509,283 +520,6 @@
   };
 
 
-  /* ---- A5: MetalSlug + patches menu/boot + gameConfig/boot/window.DO (orig scenes.js 6518-6852) ---- */
-  class MetalSlugScene extends Phaser.Scene {
-    constructor(){ super('MetalSlug'); }
-    create(data){
-      const stageIdx = data.stageIdx!=null ? data.stageIdx : (data.nextMapIdx||0);
-      this.stageIdx = Math.max(0, Math.min(4, stageIdx));
-      this.stage = (D.METAL_STAGES && D.METAL_STAGES[this.stageIdx]) || {name:'Trincheira', bg:'#0f172a', accent:'#38bdf8', enemyPool:['swarm','drone'], duration:35, target:24, gravity:950};
-      this.nextMap = data.nextMapIdx || 0;
-      this.diffKey = data.diffKey || 'normal';
-      this.pilotId = data.pilotId || (D.PILOTS ? D.PILOTS[0].id : 'cannon');
-      this.pilot = (D.PILOTS||[]).find(p=>p.id===this.pilotId) || {name:'Recruta', color:'#38bdf8', ability:'dash', icon:'★'};
-      this.score=0; this.timeLeft=this.stage.duration||35; this.enemies=[]; this.bullets=[];
-      // Fundo selva como referência Metal Slug (templo, árvores, céu)
-      this.cameras.main.setBackgroundColor(this.stage.bg||'#1a3a1a');
-      const jungle = this.add.graphics().setDepth(0);
-      jungle.fillStyle(0x0f2a1a,1); jungle.fillRect(0,0,BW,BH);
-      jungle.fillStyle(0x1a4a1a,1);
-      jungle.beginPath(); jungle.moveTo(0,120); for(let x=0;x<BW;x+=30) jungle.lineTo(x, 80 + Math.sin(x*0.015)*18 + Math.random()*10); jungle.lineTo(BW,0); jungle.lineTo(0,0); jungle.fillPath();
-      jungle.fillStyle(0x3d2e1a,1); jungle.fillRect(BW/2-90, 50, 180, 70);
-      jungle.fillStyle(0x5a3d1a,1); jungle.fillTriangle(BW/2-100,50, BW/2+100,50, BW/2,10);
-      jungle.fillStyle(0x2d1a0a,1); jungle.fillRect(BW/2-14, 80, 28, 40);
-      for(let i=0;i<5;i++){ jungle.fillStyle(0x3d2817,1); jungle.fillRect(30+i*170, BH-180, 14, 100); jungle.fillStyle(0x1a5a1a,1); jungle.fillCircle(37+i*170, BH-190, 34); }
-      // Chão e plataformas
-      this.platforms = this.physics.add.staticGroup();
-      const ground = this.add.rectangle(BW/2, BH-14, BW, 28, 0x2d1a0a);
-      this.platforms.add(ground);
-      const plats = [
-        {x:180, y:BH-110, w:160, h:14},{x:520, y:BH-160, w:180, h:14},{x:760, y:BH-100, w:140, h:14},
-        {x:360, y:BH-210, w:120, h:14},{x:640, y:BH-240, w:100, h:14}
-      ];
-      plats.forEach(p=>{
-        const r=this.add.rectangle(p.x, p.y, p.w, p.h, 0x5a3d1a);
-        this.platforms.add(r);
-        this.add.rectangle(p.x, p.y-3, p.w, 3, 0x8b5a2b).setDepth(1);
-      });
-      // Player soldado detalhado (capacete, mochila)
-      const col = Phaser.Display.Color.HexStringToColor(this.pilot.color).color;
-      this.player = this.physics.add.sprite(80, BH-80, 'dot').setScale(1.4).setDepth(10).setTint(col);
-      // Desenha soldado via graphics como fallback se textura não existir
-      this.player.setTexture('dot');
-      // Corpo
-      this.player.body.setSize(18,28).setOffset(-2, -4);
-      this.player.setTint(0xffffff);
-      // Adiciona detalhes visuais como container
-      this.playerContainer = this.add.container(this.player.x, this.player.y).setDepth(10);
-      const body = this.add.rectangle(0, 0, 14, 18, col);
-      const head = this.add.circle(0, -12, 6, 0xffdbac);
-      const helm = this.add.ellipse(0, -14, 14, 10, 0x4a5568);
-      const gun = this.add.rectangle(8, -2, 16, 4, 0x1a202c);
-      this.playerContainer.add([body, head, helm, gun]);
-      this.physics.add.existing(this.playerContainer);
-      this.playerContainer.body.setSize(18,28);
-      this.playerContainer.body.setCollideWorldBounds(true);
-      // Usa container como player
-      this.player.destroy();
-      this.player = this.playerContainer;
-      this.playerBody = this.player.body;
-      this.physics.add.collider(this.player, this.platforms);
-      this.cursors = this.input.keyboard.createCursorKeys();
-      this.keys = this.input.keyboard.addKeys('W,A,S,D,SPACE,G');
-      this.input.keyboard.on('keydown-SPACE', ()=> this.shoot());
-      this.input.keyboard.on('keydown-G', ()=> this.grenade());
-      this.input.on('pointerdown', (p)=> { if(p.button===0) this.shoot(); else this.grenade(); });
-      this.scoreTxt = this.add.text(12,10, 'PONTOS 0/'+(this.stage.target||24), {fontFamily:'Orbitron', fontSize:'14px', color:'#fbbf24'}).setDepth(20);
-      this.timeTxt = this.add.text(BW-12,10, Math.ceil(this.timeLeft)+'s', {fontFamily:'Orbitron', fontSize:'14px', color:'#38bdf8'}).setOrigin(1,0).setDepth(20);
-      this.add.text(BW/2, 10, `${this.stage.name.toUpperCase()} — ${this.pilot.callsign}`, {fontFamily:'Orbitron', fontSize:'11px', color:this.stage.accent||'#e8eefc'}).setOrigin(0.5,0).setDepth(20);
-      this.add.text(BW/2, 24, 'A/D move • W pula • ESPAÇO atira • G granada', {fontFamily:'Rajdhani', fontSize:'10px', color:'#e8eefc'}).setOrigin(0.5,0).setDepth(20);
-      this.enemyGroup = this.physics.add.group();
-      this.physics.add.collider(this.enemyGroup, this.platforms);
-      this.physics.add.overlap(this.player, this.enemyGroup, (pl,en)=> this.hitPlayer(en), null, this);
-      this.bulletGroup = this.physics.add.group();
-      this.physics.add.overlap(this.bulletGroup, this.enemyGroup, (b,e)=> this.hitEnemy(b,e), null, this);
-      this.spawnTimer=0;
-    }
-    shoot(){
-      if(this.timeLeft<=0) return;
-      const dir=this.player.flipX ? -1 : 1;
-      const b=this.physics.add.image(this.player.x+dir*14, this.player.y-4, 'dot').setTint(0xfbbf24).setScale(0.75).setDepth(9);
-      b.body.setAllowGravity(false); b.body.setVelocity(dir*520, 0);
-      this.bulletGroup.add(b);
-      this.time.delayedCall(700, ()=> b.active && b.destroy());
-      SND.shoot('bullet');
-      // Flash do capacete
-      this.tweens.add({targets:this.player, scale:1.08, duration:60, yoyo:true});
-    }
-    grenade(){
-      if(this.timeLeft<=0) return;
-      const dir=this.player.flipX ? -1 : 1;
-      const g=this.physics.add.image(this.player.x+dir*8, this.player.y, 'dot').setTint(0xfb923c).setScale(0.85).setDepth(9);
-      g.body.setVelocity(dir*260, -380); g.body.setBounce(0.3);
-      this.physics.add.collider(g, this.platforms);
-      this.time.delayedCall(800, ()=>{
-        if(!g.active) return;
-        SND.explosion(1.1);
-        this.cameras.main.shake(120,0.007);
-        const ring=this.add.image(g.x,g.y,'ring').setTint(0xfb923c).setScale(0.3).setAlpha(0.9).setDepth(11);
-        this.tweens.add({targets:ring, scale:1.8, alpha:0, duration:340, onComplete:()=>ring.destroy()});
-        this.enemyGroup.children.entries.slice().forEach(en=>{
-          if(Phaser.Math.Distance.Between(g.x,g.y,en.x,en.y)< 70) this.killEnemy(en);
-        });
-        g.destroy();
-      });
-    }
-    spawnEnemy(){
-      const pool=this.stage.enemyPool||['swarm','drone'];
-      const t=pool[Math.floor(Math.random()*pool.length)];
-      const def=D.ENEMIES_DATA[t]||D.ENEMIES_DATA['swarm'];
-      const x=BW+20, y=BH-50 - Math.random()*140;
-      const en=this.physics.add.image(x,y, 'dot').setTint(Phaser.Display.Color.HexStringToColor(def.col).color).setScale(0.95).setDepth(8);
-      en.body.setAllowGravity(false); en.body.setVelocity(-(70+Math.random()*70 + this.score*1), 0);
-      en.hp=1; en.def=def;
-      this.enemyGroup.add(en);
-      this.time.delayedCall(600, ()=>{ if(en.active) en.body.setAllowGravity(true); });
-    }
-    hitEnemy(b,e){ b.destroy(); this.killEnemy(e); }
-    killEnemy(e){
-      if(!e.active) return;
-      const x=e.x, y=e.y;
-      e.destroy();
-      this.score++;
-      SND.explosion(0.6);
-      for(let k=0;k<6;k++){
-        const s=this.add.image(x,y,'dot').setTint(0xfbbf24).setScale(0.45);
-        this.tweens.add({targets:s, x:x+(Math.random()-0.5)*40, y:y+(Math.random()-0.5)*40, alpha:0, scale:0.1, duration:280, onComplete:()=>s.destroy()});
-      }
-      this.scoreTxt.setText('PONTOS '+this.score+'/'+(this.stage.target||24));
-      if(this.score>=(this.stage.target||24)) this.finish(true);
-    }
-    hitPlayer(en){
-      if(this._hitCd && this.time.now < this._hitCd) return;
-      this._hitCd=this.time.now+800;
-      en.destroy();
-      this.cameras.main.shake(120,0.008);
-      this.cameras.main.flash(80, 244,63,94,false);
-      SND.leak();
-      this.score=Math.max(0,this.score-1);
-      this.scoreTxt.setText('PONTOS '+this.score+'/'+(this.stage.target||24));
-    }
-    update(_, delta){
-      const dt=delta/1000;
-      if(this.timeLeft<=0) return;
-      this.timeLeft-=dt;
-      this.timeTxt.setText(Math.ceil(Math.max(0,this.timeLeft))+'s');
-      this.timeTxt.setColor(this.timeLeft<7?'#f43f5e':'#38bdf8');
-      let vx=0;
-      if(this.cursors.left.isDown || this.keys.A.isDown) vx=-200;
-      if(this.cursors.right.isDown || this.keys.D.isDown) vx=200;
-      this.player.body.setVelocityX(vx);
-      if(vx!==0) this.player.flipX = vx<0;
-      if((this.cursors.up.isDown || this.keys.W.isDown) && this.player.body.blocked.down){
-        this.player.body.setVelocityY(-460);
-      }
-      this.spawnTimer=(this.spawnTimer||0)+dt;
-      if(this.spawnTimer>0.6){
-        this.spawnTimer=0;
-        this.spawnEnemy();
-        if(Math.random()<0.35) this.spawnEnemy();
-      }
-      if(this.timeLeft<=0) this.finish(false);
-    }
-    finish(victory){
-      if(this._finished) return;
-      this._finished=true;
-      const ok = this.score >= (this.stage.target||24);
-      const bonus = ok ? 120 : 20;
-      D.Save.data.crystals += bonus;
-      D.Save.save();
-      SND.victory();
-      this.physics.pause();
-      this.add.rectangle(BW/2,BH/2,BW,BH,0x020617,0.78).setDepth(19);
-      this.add.text(BW/2, BH/2-28, ok?'SETOR LIMPO!':'RECÚO', {fontFamily:'Orbitron', fontSize:'20px', color:ok?'#34d399':'#fbbf24'}).setOrigin(0.5).setDepth(20);
-      this.add.text(BW/2, BH/2+4, `+${bonus} cristais`, {fontFamily:'Rajdhani', fontSize:'13px', color:'#e8eefc'}).setOrigin(0.5).setDepth(20);
-      const label = this.nextMap >= D.MAPS_DATA.length ? '▶ VOLTAR À BASE' : '▶ EMBARCAR → NAVINHA';
-      const btn=this.add.text(BW/2, BH/2+44, label, {fontFamily:'Orbitron', fontSize:'13px', color:'#020617', backgroundColor:this.stage.accent||'#38bdf8', padding:{left:16,right:16,top:9,bottom:9}}).setOrigin(0.5).setDepth(20).setInteractive({useHandCursor:true});
-      btn.on('pointerdown', ()=>{
-        if(this.nextMap >= D.MAPS_DATA.length) this.scene.start('Menu');
-        else this.scene.start('Shmup', {stageIdx:this.stageIdx, nextMapIdx:this.nextMap, diffKey:this.diffKey});
-      });
-      this.time.delayedCall(3500, ()=>{
-        if(this.scene.isActive()){
-          if(this.nextMap >= D.MAPS_DATA.length) this.scene.start('Menu');
-          else this.scene.start('Shmup', {stageIdx:this.stageIdx, nextMapIdx:this.nextMap, diffKey:this.diffKey});
-        }
-      });
-    }
-  }
-  // Patch Menu para mostrar pilotos e 5 estilos Nave
-  const _origMenuCreateMS = MenuScene.prototype.create;
-  MenuScene.prototype.create = function(){
-    _origMenuCreateMS.call(this);
-    // mostra galeria de pilotos no menu?
-    const btnMS=document.getElementById('btn-shmup');
-    if(btnMS){
-      btnMS.textContent='★ 5 ESTILOS NAVINHA (90s/2000s)';
-      const nb=btnMS.cloneNode(true); btnMS.parentNode.replaceChild(nb, btnMS);
-      nb.addEventListener('click', ()=>{
-        SND.ui();
-        // abre seletor de campanhas 5x5 com escolha de nave
-        const camps = D.NAVE_CAMPAIGNS||D.NAVE_STYLES||[];
-        const modal=document.createElement('div');
-        modal.style.cssText='position:fixed;inset:0;z-index:99;background:rgba(3,7,18,0.88);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px)';
-        const box=document.createElement('div');
-        box.style.cssText='background:linear-gradient(180deg,#0d1a33,#0a1328);border:1px solid #38bdf8;border-top:3px solid #38bdf8;padding:18px;max-width:780px;width:92%;max-height:85vh;overflow:auto';
-        let html='<h2 style="font-family:Orbitron;color:#38bdf8;margin-bottom:10px">★ 5 CAMPANHAS NAVINHA — 25 FASES</h2><p style="color:#8fa3c4;font-size:12px;margin-bottom:12px">Cada campanha tem 5 fases com começo-meio-fim e objetivos variados. Escolha a campanha para ver fases e escolher nave.</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
-        camps.forEach((camp,i)=>{
-          const phases=camp.phases||[camp];
-          const prog=(D.Save.data.naveProgress&&D.Save.data.naveProgress[camp.id])||1;
-          const starsArr=(D.Save.data.naveStars&&D.Save.data.naveStars[camp.id])||[0,0,0,0,0];
-          const dots=phases.map((ph,idx)=> idx<prog? (starsArr[idx]?'★'.repeat(starsArr[idx]): '●') : '○').join(' ');
-          html+=`<button data-camp="${i}" style="text-align:left;padding:10px;background:#0f172a;border:1px solid ${camp.accent};color:#e8eefc"><b style="color:${camp.accent}">${camp.name.toUpperCase()}</b><br><span style="font-size:11px;color:#8fa3c4">${camp.desc}</span><br><span style="font-size:10px;color:${camp.accent}">${dots} • ${phases.length} FASES</span></button>`;
-        });
-        html+='</div><button id="closeInter" style="margin-top:12px;padding:6px 14px">✕ FECHAR</button>';
-        box.innerHTML=html;
-        modal.appendChild(box);
-        document.body.appendChild(modal);
-        box.querySelectorAll('[data-camp]').forEach(b=> b.addEventListener('click', ()=>{
-          const idx=parseInt(b.getAttribute('data-camp'));
-          document.body.removeChild(modal);
-          MenuDOM.showNaveCampaign(idx);
-        }));
-        box.querySelector('#closeInter').addEventListener('click', ()=> document.body.removeChild(modal));
-        modal.addEventListener('click', (e)=>{ if(e.target===modal) document.body.removeChild(modal); });
-      });
-    }
-  };
-  // TD e NAVINHA são campanhas separadas (30 fases: 5 TD + 25 NAV) — não interlúdio obrigatório
-  const _origShowEndMS = GameScene.prototype.showEndModal;
-  GameScene.prototype.showEndModal = function(){
-    _origShowEndMS.call(this);
-    if(this.S.result && this.S.result.outcome==='victory'){
-      const modal = document.getElementById('modal-end');
-      if(modal && !document.getElementById('btn-nave-camp')){
-        const btnNext = document.getElementById('btn-next');
-        if(btnNext && btnNext.parentNode){
-          const btnNave = document.createElement('button');
-          btnNave.id='btn-nave-camp';
-          btnNave.textContent='★ AVENTURA NAVINHA (25 FASES)';
-          btnNave.className=btnNext.className;
-          btnNave.style.marginLeft='8px';
-          btnNave.style.borderColor='#a3e635';
-          btnNave.style.color='#a3e635';
-          btnNext.parentNode.appendChild(btnNave);
-          btnNave.addEventListener('click', ()=>{
-            SND.ui();
-            this.hideEndModal();
-            const sc=this;
-            // FIX TRAVA MINI-FASE: limpa DOM do TD e para a cena Game antes de ir ao Menu
-            try{ if(sc.cleanup) sc.cleanup(); }catch(e){}
-            try{ document.getElementById('topbar')?.classList.add('off'); }catch(e){}
-            try{ document.getElementById('shopbar')?.classList.add('off'); }catch(e){}
-            try{ document.getElementById('board-shell')?.classList.remove('hidden'); }catch(e){}
-            if(sc.cameras && sc.cameras.main && sc.cameras.main.fadeOut){
-              sc.cameras.main.fadeOut(200);
-              sc.time.delayedCall(220, ()=> {
-                try{ sc.scene.stop('Game'); }catch(e){}
-                sc.scene.start('Menu');
-                setTimeout(()=>{ const b=document.getElementById('btn-shmup'); if(b) b.click(); }, 500);
-              });
-            } else {
-              try{ sc.scene.stop('Game'); }catch(e){}
-              sc.scene.start('Menu');
-            }
-          });
-        }
-      }
-    }
-  };
-  // Adiciona as cenas ao gameConfig + 5 estilos Nave
-  const _origBootMS2 = boot;
-  boot = function(){
-    try{
-      if(typeof gameConfig!=="undefined" && gameConfig.scene){
-        [NaveScene, AsteroidsScene, HorizontalScene, VerticalScene, ArenaScene, TunnelScene, ShmupScene].forEach(cls=>{ if(gameConfig.scene.indexOf(cls)===-1) gameConfig.scene.push(cls); });
-      }
-    }catch(e){}
-    return _origBootMS2();
-  };
 
   /* ================= S3 SUNSET: fundo do menu (lua + nuvens + horizonte + brasas) ================= */
   // Direção de arte: pôr-do-sol cinematográfico atrás do DOM do menu. PROIBIDO ROXO.
@@ -907,10 +641,11 @@
     width: BW,
     height: BH,
     parent: 'game-canvas',
+    pixelArt: true, // ONDA 4: nearest + roundPixels (1px lógico = 3px reais, sem borrão)
     backgroundColor: '#050914',
     physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-    scene: [BootScene, MenuScene, GameScene, NaveScene, AsteroidsScene, HorizontalScene, VerticalScene, ArenaScene, TunnelScene, ShmupScene]
+    scene: [BootScene, MenuScene, GameScene]
   };
 
   let booted = false;
@@ -954,7 +689,6 @@
   window.DO.hpMultiplier = hpMultiplier;
   window.DO.finalizeEnd = finalizeEnd;
   window.DO.continueEndlessAfterVictory = continueEndlessAfterVictory;
-  window.DO.recordNaveProgress = recordNaveProgress;
   window.DO.isMapUnlocked = isMapUnlocked;
   window.DO.syncMapCardState = syncMapCardState;
   window.DO.toggleAutoMove = toggleAutoMove; // G10

@@ -8,13 +8,13 @@
   // S2 SUNSET: paleta crepuscular (sem roxo) — céu poeira, âmbar, creme.
   const DUSK_SKY = '#1c2b4d', DUSK_AMBER = '#f5a83d', DUSK_CREAM = '#ffe9bd';
   const THEMES = {
-    'neptune-frontier': { bg:'#051425', accent:'#38bdf8', accent2:'#67e8f9', speck:'#0a2a4a', motif:'ice' },
-    'saturn-rings':     { bg:'#1a1408', accent:'#fbbf24', accent2:'#f59e0b', speck:'#3a2a0a', motif:'rings' },
-    'jupiter-orbit':    { bg:'#1a0f08', accent:'#fb923c', accent2:'#f97316', speck:'#3a1a08', motif:'storm' },
-    'asteroid-belt':    { bg:'#0f0a14', accent:'#94a3b8', accent2:'#64748b', speck:'#1e1a2a', motif:'rock' },
-    'earth-orbit':      { bg:'#051425', accent:'#22d3ee', accent2:'#38bdf8', speck:'#0a2a3a', motif:'orbit' },
-    'solar-system':     { bg:'#020617', accent:'#a3e635', accent2:'#fbbf24', speck:'#17230a', motif:'nav' },
-    'sunset-dusk':      { bg:'#1c2b4d', accent:'#f5a83d', accent2:'#ffe9bd', speck:'#3a2c1a', motif:'dusk', dusk:true }
+    'neptune-frontier': { bg:'#051425', accent:'#38bdf8', accent2:'#67e8f9', speck:'#0a2a4a', motif:'ice', moon:{ tint:0xbfe3ff, scale:0.30 } },
+    'saturn-rings':     { bg:'#1a1408', accent:'#fbbf24', accent2:'#f59e0b', speck:'#3a2a0a', motif:'rings', moon:{ tint:0xffd98a, scale:0.32 } },
+    'jupiter-orbit':    { bg:'#1a0f08', accent:'#fb923c', accent2:'#f97316', speck:'#3a1a08', motif:'storm', moon:{ tint:0xffc46b, scale:0.38 } },
+    'asteroid-belt':    { bg:'#0f0a14', accent:'#94a3b8', accent2:'#64748b', speck:'#1e1a2a', motif:'rock', moon:{ tint:0xd1d5db, scale:0.26 } },
+    'earth-orbit':      { bg:'#051425', accent:'#22d3ee', accent2:'#38bdf8', speck:'#0a2a3a', motif:'orbit', moon:{ tint:0xa5f3fc, scale:0.30 } },
+    'solar-system':     { bg:'#020617', accent:'#a3e635', accent2:'#fbbf24', speck:'#17230a', motif:'nav', moon:{ tint:0xfff6e0, scale:0.30 } },
+    'sunset-dusk':      { bg:'#1c2b4d', accent:'#f5a83d', accent2:'#ffe9bd', speck:'#3a2c1a', motif:'dusk', dusk:true, moon:{ tint:0xffffff, scale:0.30 } }
   };
 
   function hexToNum(hex){ return parseInt(hex.slice(1),16); }
@@ -140,43 +140,25 @@
         g.destroy();
       }
       // 16 peças de pista conectáveis: U/R/D/L em bitmask 1/2/4/8.
+      // ONDA 4: texturas determinísticas — só gera se faltar (Boot→Menu→Game não regenera).
       for(let mask=0;mask<16;mask++){
         const pathKey='tile_path_'+theme+'_'+mask;
-        if(scene.textures.exists(pathKey)){ try{ scene.textures.remove(pathKey); }catch(e){} }
+        if(scene.textures.exists(pathKey)) continue;
         const g=scene.make.graphics({x:0,y:0,add:false}); drawPathTile(g,theme,mask); g.generateTexture(pathKey,CELL,CELL); g.destroy();
       }
       const legacyPath='tile_path_'+theme;
-      if(scene.textures.exists(legacyPath)){ try{ scene.textures.remove(legacyPath); }catch(e){} }
-      { const g=scene.make.graphics({x:0,y:0,add:false}); drawPathTile(g,theme,15); g.generateTexture(legacyPath,CELL,CELL); g.destroy(); }
+      if(!scene.textures.exists(legacyPath)){
+        const g=scene.make.graphics({x:0,y:0,add:false}); drawPathTile(g,theme,15); g.generateTexture(legacyPath,CELL,CELL); g.destroy();
+      }
       // fundo 2×2 alternado evita repetição óbvia do mesmo tile.
       const bgKey='tile_bg_'+theme;
-      if(scene.textures.exists(bgKey)){
-        try{ scene.textures.remove(bgKey); }catch(e){ try{ scene.textures.get(bgKey).destroy(); }catch(e2){} }
-      }
-      {
+      if(!scene.textures.exists(bgKey)){
         const g=scene.make.graphics({x:0,y:0,add:false});
         [['a','b'],['b','a']].forEach((row,ry)=>row.forEach((v,rx)=>{g.save();g.translateCanvas(rx*CELL,ry*CELL);drawTile(g,theme,v);g.restore();}));
         g.generateTexture(bgKey, CELL*2, CELL*2);
         g.destroy();
       }
-      // miniatura 44*3 para preview cards (pixel art)
-      const keyMini='tile_'+theme+'_mini';
-      if(scene.textures.exists(keyMini)) continue;
-      const g2=scene.make.graphics({x:0,y:0,add:false});
-      // fundo navy -> bg com pixel grid
-      g2.fillStyle(hexToNum(THEMES[theme].bg),1); g2.fillRect(0,0,132,88);
-      g2.fillStyle(hexToNum('#050914'),0.55); g2.fillRect(0,0,132,88);
-      // grid pixel 1px a cada 22px (metade da célula)
-      g2.lineStyle(1, hexToNum(THEMES[theme].accent),0.15);
-      for(let x=0;x<132;x+=22) g2.moveTo(x,0), g2.lineTo(x,88);
-      for(let y=0;y<88;y+=22) g2.moveTo(0,y), g2.lineTo(132,y);
-      g2.strokePath();
-      // path preview: desenha 3 blocos centrais como exemplo
-      g2.fillStyle(hexToNum('#0d1526'),0.9); g2.fillRect(10,38,44,12); g2.fillRect(54,38,44,12); g2.fillRect(76,26,12,24);
-      g2.lineStyle(1, hexToNum(THEMES[theme].accent),0.35); g2.strokeRect(10,38,44,12); g2.strokeRect(54,38,44,12);
-      if(THEMES[theme].dusk) paintDuskSky(g2, 132, 88);
-      g2.generateTexture(keyMini,132,88);
-      g2.destroy();
+      // ONDA 5: miniatura tile_<theme>_mini removida (órfã, 7 texturas sem consumidores — rg confirmou)
     }
   }
 

@@ -68,7 +68,8 @@
           this.master.gain.setValueAtTime(0.55, t);
           if(this.musicGain) this.musicGain.gain.setValueAtTime(0.34, t);
           if(this.sfxGain) this.sfxGain.gain.setValueAtTime(0.9, t);
-          if(this._drones) this._drones.forEach(d=>{ try{ d.g.gain.setValueAtTime(d.g.gain.value, t); }catch(e){} });
+          // ONDA 5: restaura o ganho BASE do drone (d.g.gain.value já foi zerado no mute; antes o som sumia)
+          if(this._drones) this._drones.forEach(d=>{ try{ d.g.gain.setValueAtTime(d.base != null ? d.base : 0.16, t); }catch(e){} });
         }
       } catch (e) {}
     },
@@ -244,7 +245,7 @@
         lfo.connect(lg); lg.connect(f.frequency);
         o.connect(f); f.connect(g); g.connect(this.musicGain);
         o.start(); lfo.start();
-        return { f, g };
+        return { f, g, base: gainV };
       };
       this._drones = [mkDrone(55, -6, 0.16), mkDrone(55, 7, 0.14), mkDrone(82.4, 3, 0.08)];
       this._arpFilter = c.createBiquadFilter();

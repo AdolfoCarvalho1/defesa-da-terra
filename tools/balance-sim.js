@@ -62,15 +62,21 @@ if (!anyMissing) {
 console.log('\n--- 2) CURVA DE DIFICULDADE: HP inimigo (mapa 5, normal, lab 0) vs DPS por tier ---');
 anyMissing |= missing('ENEMIES_DATA', D.ENEMIES_DATA);
 anyMissing |= missing('MAPS_DATA (waves)', D.MAPS_DATA && D.MAPS_DATA[4] && D.MAPS_DATA[4].waves);
-anyMissing |= missing('TIER_STATS', D.TIER_STATS);
 if (!anyMissing) {
   const MAP_IDX = 4, DIFF_HP = 1, MAX_LAB = 5;
   const waves = D.MAPS_DATA[4].waves;
   const parse = D.parseWaveString || (s => s.trim().split(/\s+/).map(tok => ({ type: tok.replace(/\d/g, '') })));
-  // DPS relativo por tier = dmg × rate de TIER_STATS (T1 = 1.0)
-  const dpsMul = D.TIER_STATS.map(s => (s ? s.dmg * s.rate : null)); // dpsMul[tier]
+  // DPS relativo por tier = curva real de nível (espelha getTowerStats de sim.js; T1 = 1.0)
+  const refDef = (D.TOWERS_DATA && (D.TOWERS_DATA.find(t => t.id === 'cannon') || D.TOWERS_DATA[0])) || { dmg: 1, rate: 1 };
+  const dpsAt = lvl => {
+    const lv = Math.max(1, lvl | 0);
+    const dmg = (refDef.dmg || 1) * (1 + (lv - 1) * 0.22) * Math.pow(1.038, lv - 1);
+    const rate = (refDef.rate || 0) > 0 ? refDef.rate * (1 + (lv - 1) * 0.018) * Math.pow(1.012, lv - 1) : 1;
+    return dmg * rate;
+  };
+  const dpsMul = [null, 1, 2, 3, 4, 5].map(t => t ? dpsAt((t - 1) * 10 + 1) / dpsAt(1) : null); // dpsMul[tier] (nível de entrada)
   const tierNames = D.TIER_NAMES || ['T1', 'T2', 'T3', 'T4', 'T5'];
-  console.log('DPS relativo por tier: ' + tierNames.map((n, i) => `${n}×${fmt(dpsMul[i + 1], 2)}`).join('  '));
+  console.log('DPS relativo por tier (curva de nível, sem TIER_STATS): ' + tierNames.map((n, i) => `${n}×${fmt(dpsMul[i + 1], 2)}`).join('  '));
   const labNote = Array.from({ length: MAX_LAB + 1 }, (_, l) => `lab${l}:×${fmt(1 + l * ((D.HIVEMIND && D.HIVEMIND.hpAdd) || 0.12), 2)}`).join(' ');
   console.log(`multiplicador Hivemind sobre HP (${labNote})`);
   const head = pad('onda', 5) + pad('inim.', 6) + pad('EHP total', 11) + pad('hpMul', 8) +

@@ -82,7 +82,7 @@
     show() {
       const m = this.el('screen-menu');
       if (m) m.classList.remove('hidden');
-      document.body.classList.remove('is-playing', 'mode-nave');
+      document.body.classList.remove('is-playing');
       // S3 SUNSET: afina o véu do menu para a cena Phaser aparecer (só visual, sem lógica)
       try { if (m && m.style) m.style.background = 'radial-gradient(700px 400px at 20% 0%, rgba(246,231,203,.06) 0%, transparent 60%), radial-gradient(800px 500px at 80% 100%, rgba(245,168,61,.10) 0%, transparent 60%), linear-gradient(180deg, rgba(13,18,32,.30) 0%, rgba(13,18,32,.62) 100%)'; } catch (_s3) {}
       // U-ASTRO: astronauta sentado na colina (sempre no menu)
@@ -132,45 +132,6 @@
         });
         grid.appendChild(card);
       });
-      // 5 CAMPANHAS NAVINHA x 5 FASES = 25 fases (total 30 com TD)
-      const shmupGrid = this.el('shmup-grid');
-      const campaigns = (D.NAVE_CAMPAIGNS||D.NAVE_STYLES||[]);
-      if(shmupGrid && campaigns.length){
-        shmupGrid.innerHTML='';
-        campaigns.forEach((camp,i)=>{
-          const phases = camp.phases||[camp];
-          const prog = (D.Save.data.naveProgress && D.Save.data.naveProgress[camp.id]) || 1;
-          const starsArr = (D.Save.data.naveStars && D.Save.data.naveStars[camp.id]) || [0,0,0,0,0];
-          const c=document.createElement('div');
-          c.className='map-card chamf';
-          c.style.borderColor=camp.accent;
-          // V1-js: campanha nave também operável por teclado
-          c.setAttribute('role', 'button');
-          c.tabIndex = 0;
-          c.setAttribute('aria-label', camp.name + '. Campanha ' + prog + ' de 5. Abrir fases');
-          const dots = phases.map((ph,idx)=>{
-            const s=starsArr[idx]||0;
-            if(idx < prog) return s? '★'.repeat(s)+'☆'.repeat(3-s) : '●';
-            return '○';
-          }).join(' ');
-          const totalStars = starsArr.reduce((a,b)=>a+b,0);
-          c.innerHTML=`<canvas width=168 height=80 style="background:${camp.bg};border:1px solid ${camp.accent}22"></canvas><div class=mc-info><div class=mc-name style="color:${camp.accent}">★ ${camp.name.toUpperCase()}</div><div class=mc-sub>${camp.desc}</div><div class=m-stars style="color:${camp.accent}">${dots} • ${phases.length} FASES • ${totalStars}★</div><div class=m-stars style="color:${camp.accent};font-size:10px">▶ CAMPANHA ${prog}/5</div></div>`;
-          const cv=c.querySelector('canvas');
-          if(cv){
-            const ctx2=cv.getContext('2d');
-            ctx2.fillStyle=camp.bg; ctx2.fillRect(0,0,cv.width,cv.height);
-            ctx2.fillStyle=camp.accent; ctx2.globalAlpha=0.35;
-            for(let k=0;k<14;k++) ctx2.fillRect(Math.random()*cv.width, Math.random()*cv.height, 2,2);
-            ctx2.globalAlpha=1; ctx2.fillStyle='#fff'; ctx2.font='8px Orbitron'; ctx2.fillText('NAV '+(i+1)+' • '+phases.length+'F',6,14);
-            // mini preview fases
-            ctx2.fillStyle=camp.accent; ctx2.globalAlpha=0.9;
-            for(let p=0;p<5;p++){ const x=10+p*30, y=48; ctx2.fillRect(x,y,22,10); ctx2.fillStyle='#fff'; ctx2.font='7px Orbitron'; ctx2.fillText(String(p+1),x+7,y+8); ctx2.fillStyle=camp.accent; }
-          }
-          c.addEventListener('click', ()=>{ SND.ui(); MenuDOM.showNaveCampaign(i); });
-          c.addEventListener('keydown', (e)=>{ if(e.key!=='Enter'&&e.key!==' ') return; e.preventDefault(); c.click(); });
-          shmupGrid.appendChild(c);
-        });
-      }
       const drow = this.el('diff-row');
       drow.innerHTML = '';
       Object.keys(D.DIFFICULTIES).forEach(k => {
@@ -259,83 +220,6 @@
       this.el('opt-endless-wrap').classList.toggle('disabled', !canEndless);
       if (!canEndless) { this.el('opt-endless').checked = false; this.sel.endless = false; }
     },
-    showNaveCampaign(campaignIdx){
-      const camps = D.NAVE_CAMPAIGNS||D.NAVE_STYLES||[];
-      const camp = camps[campaignIdx]; if(!camp) return;
-      const phases = camp.phases||[camp];
-      const prog = (D.Save.data.naveProgress && D.Save.data.naveProgress[camp.id]) || 1;
-      const starsArr = (D.Save.data.naveStars && D.Save.data.naveStars[camp.id]) || [0,0,0,0,0];
-      let selectedShip = localStorage.getItem('nave_last_ship') || D.TOWERS_DATA[0].id;
-      const modal=document.createElement('div');
-      modal.style.cssText='position:fixed;inset:0;z-index:99;background:rgba(3,7,18,0.90);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px)';
-      const box=document.createElement('div');
-      box.style.cssText='background:linear-gradient(180deg,#0d1a33,#0a1328);border:1px solid '+camp.accent+';border-top:3px solid '+camp.accent+';padding:18px;max-width:780px;width:92%;max-height:88vh;overflow:auto';
-      const render = ()=>{
-        let html=`<h2 style="font-family:Orbitron;color:${camp.accent};margin-bottom:6px">★ ${camp.name.toUpperCase()} — 5 FASES</h2><p style="color:#8fa3c4;font-size:12px;margin-bottom:10px">${camp.desc} • Cristais: <b style="color:#fbbf24">${D.Save.data.crystals}</b></p>`;
-        html+=`<div style="margin-bottom:12px;padding:8px;background:rgba(0,0,0,0.25);border:1px solid ${camp.accent}33"><div style="font-family:Orbitron;color:${camp.accent};font-size:11px;margin-bottom:6px">ESCOLHA SUA NAVE (1 das 10) — mesmo sistema TD, skill a cada 4 níveis</div><div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">`;
-        D.TOWERS_DATA.forEach(td=>{
-          const lvl = (D.Save.data.shipLevels && D.Save.data.shipLevels[td.id]) || 1;
-          const sel = td.id===selectedShip ? 'outline:2px solid '+camp.accent+';background:rgba(56,189,248,0.12)' : 'opacity:0.92';
-          const cost = 12 + lvl*8;
-          const nextSkill = td.skills ? td.skills.find(s=>s.lvl===lvl+1) : null;
-          html+=`<button data-ship="${td.id}" style="text-align:left;padding:6px;background:#111e3a;border:1px solid ${td.color};color:#e8eefc;${sel}"><div style="font-size:11px;font-weight:700;color:${td.color}">${td.icon} ${td.name}</div><div style="font-size:10px;color:#8fa3c4">NV ${lvl}/50</div><div style="font-size:9px;color:#fbbf24">${nextSkill? '→ NV'+nextSkill.lvl+' '+nextSkill.name : 'MAX'}</div></button>`;
-        });
-        html+=`</div><div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">`;
-        const selLvl = (D.Save.data.shipLevels[selectedShip]||1);
-        const upCost = 12 + selLvl*8;
-        const canUp = D.Save.data.crystals >= upCost && selLvl < 50;
-        html+=`<button id="btnUpShip" style="padding:5px 10px;background:${canUp?'#1e3a5f':'#334155'};color:${canUp?'#38bdf8':'#64748b'};border:1px solid #38bdf8;font-size:11px" ${canUp?'':'disabled'}>⬆ MELHORAR ${selectedShip.toUpperCase()} NV${selLvl}→${selLvl+1} (${upCost} cristais)</button><span style="font-size:10px;color:#8fa3c4;align-self:center">Auto-tiro + dano escala com nível/skills</span></div></div>`;
-        html+=`<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">`;
-        phases.forEach((ph, idx)=>{
-          const unlocked = idx < prog;
-          const stars = starsArr[idx]||0;
-          const starsTxt = stars? '★'.repeat(stars)+'☆'.repeat(3-stars) : (unlocked?'● Disponível':'○ Bloqueado');
-          const bg = unlocked? '#0f172a' : '#0a0f1a';
-          const border = unlocked? camp.accent : '#334155';
-          const op = unlocked? '1' : '0.45';
-          html+=`<button data-phase="${idx}" style="text-align:left;padding:10px;background:${bg};border:1px solid ${border};color:#e8eefc;opacity:${op}" ${unlocked?'':'disabled'}><div style="font-size:11px;font-weight:700;color:${camp.accent}">FASE ${ph.n}: ${ph.name}</div><div style="font-size:10px;color:#8fa3c4">${ph.desc}</div><div style="font-size:10px;color:#fbbf24;margin-top:4px">${ph.target} alvos • ${ph.duration}s • ${ph.speed.toFixed(1)}x</div><div style="font-size:11px;color:${camp.accent};margin-top:4px">${starsTxt}</div><div style="font-size:9px;color:${camp.accent};margin-top:2px">${unlocked?'▶ JOGAR': 'Complete anterior'}</div></button>`;
-        });
-        html+=`</div><button id="closeNaveCamp" style="margin-top:12px;padding:6px 14px;background:#1e293b;color:#e8eefc;border:1px solid #475569">✕ FECHAR</button>`;
-        return html;
-      };
-      box.innerHTML=render();
-      modal.appendChild(box); document.body.appendChild(modal);
-      const bind = ()=>{
-        box.querySelectorAll('[data-ship]').forEach(b=> b.addEventListener('click', ()=>{
-          selectedShip=b.getAttribute('data-ship');
-          localStorage.setItem('nave_last_ship', selectedShip);
-          SND.ui(); box.innerHTML=render(); bind();
-        }));
-        const upBtn=box.querySelector('#btnUpShip');
-        if(upBtn) upBtn.addEventListener('click', ()=>{
-          const lvl=(D.Save.data.shipLevels[selectedShip]||1);
-          const cost=12+lvl*8;
-          if(D.Save.data.crystals>=cost && lvl<50){
-            D.Save.data.crystals-=cost;
-            D.Save.data.shipLevels[selectedShip]=lvl+1;
-            D.Save.save(); SND.buy();
-            box.innerHTML=render(); bind();
-            MenuDOM.refresh();
-          } else SND.error();
-        });
-        box.querySelectorAll('[data-phase]').forEach(b=> b.addEventListener('click', ()=>{
-          const idx=parseInt(b.getAttribute('data-phase'));
-          document.body.removeChild(modal);
-          const sc = MenuDOM.scene || window.__game.scene.getScene('Menu');
-          const payload={ campaignIdx, phaseIdx: idx, stageIdx: idx, shipId: selectedShip, diffKey: MenuDOM.sel.diffKey };
-          try{
-            if(sc && sc.cameras && sc.cameras.main && sc.cameras.main.fadeOut){
-              sc.cameras.main.fadeOut(180);
-              sc.time.delayedCall(200, ()=> { try{ sc.scene.start('Nave', payload);}catch(e){ window.__game.scene.start('Nave', payload);} });
-            } else if(sc && sc.scene) sc.scene.start('Nave', payload);
-            else window.__game.scene.start('Nave', payload);
-          }catch(e){ try{ window.__game.scene.start('Nave', payload);}catch(_){} }
-        }));
-        box.querySelector('#closeNaveCamp').addEventListener('click', ()=> document.body.removeChild(modal));
-        modal.addEventListener('click', (e)=>{ if(e.target===modal) document.body.removeChild(modal); });
-      };
-      bind();
-    },
 
     start() {
       const sel = this.sel;
@@ -386,6 +270,8 @@
         card.appendChild(btn);
         wrap.appendChild(card);
       });
+      // Onda 3: modal aberto nunca convive com tooltip pinado
+      try { if (typeof hideTip === 'function') hideTip(); } catch (eTipL) {}
       this.el('modal-lab').classList.remove('hidden');
       // U-ASTRO: faixa sunset no cabeçalho (só visual, sem mexer na lista)
       try { uastroEnsureStrip('modal-lab'); } catch (_u) {}
@@ -461,6 +347,8 @@
           '<div class="cc-traits">' + traits.join('<br>') + '</div>');
         wrap.appendChild(card);
       });
+      // Onda 3: modal aberto nunca convive com tooltip pinado
+      try { if (typeof hideTip === 'function') hideTip(); } catch (eTipC) {}
       this.el('modal-codex').classList.remove('hidden');
       // U-ASTRO: faixa sunset no cabeçalho (só visual, sem mexer na lista)
       try { uastroEnsureStrip('modal-codex'); } catch (_u) {}
@@ -476,6 +364,8 @@
         card.innerHTML = '<div class="ac-icon">' + a.icon + '</div><div class="ac-name">' + a.name + '</div><div class="ac-desc">' + a.desc + '</div>';
         wrap.appendChild(card);
       });
+      // Onda 3: modal aberto nunca convive com tooltip pinado
+      try { if (typeof hideTip === 'function') hideTip(); } catch (eTipA) {}
       this.el('modal-ach').classList.remove('hidden');
       // U-ASTRO: faixa sunset no cabeçalho (só visual, sem mexer na lista)
       try { uastroEnsureStrip('modal-ach'); } catch (_u) {}

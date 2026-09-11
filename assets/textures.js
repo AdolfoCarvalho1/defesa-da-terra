@@ -272,6 +272,25 @@
     c2.fill(); c2.stroke();
   }
 
+  // G2 — luas por tema: 0 texturas novas, só tint/escala sobre a base `moon` creme (sem roxo).
+  // Fonte primária: window.TILES.THEMES[theme].moon; fallback local espelha os mesmos valores.
+  function moonFor(theme) {
+    try {
+      const m = (typeof window !== 'undefined' && window.TILES && window.TILES.THEMES[theme] && window.TILES.THEMES[theme].moon) || null;
+      if (m) return { key: 'moon', tint: m.tint, scale: m.scale };
+    } catch (e) {}
+    switch (theme) {
+      case 'neptune-frontier': return { key: 'moon', tint: 0xbfe3ff, scale: 0.30 };
+      case 'saturn-rings': return { key: 'moon', tint: 0xffd98a, scale: 0.32 };
+      case 'jupiter-orbit': return { key: 'moon', tint: 0xffc46b, scale: 0.38 };
+      case 'asteroid-belt': return { key: 'moon', tint: 0xd1d5db, scale: 0.26 };
+      case 'earth-orbit': return { key: 'moon', tint: 0xa5f3fc, scale: 0.30 };
+      case 'solar-system': return { key: 'moon', tint: 0xfff6e0, scale: 0.30 };
+      case 'sunset-dusk': return { key: 'moon', tint: 0xffffff, scale: 0.30 };
+      default: return { key: 'moon', tint: 0xffffff, scale: 0.30 };
+    }
+  }
+
   function makeTextures(scene) {
     const mk = (key, size, drawFn) => {
       if (scene.textures.exists(key)) return;
@@ -291,13 +310,6 @@
       g.fillTriangle(4, 3, 18, 11, 4, 19);
       g.fillRect(4, 8, 8, 6);
     });
-    mk('tbase', 44, g => {
-      g.fillStyle(0x101a30, 1);
-      g.fillPoints([{ x: 8, y: 2 }, { x: 36, y: 2 }, { x: 42, y: 8 }, { x: 42, y: 36 }, { x: 36, y: 42 }, { x: 8, y: 42 }, { x: 2, y: 36 }, { x: 2, y: 8 }], true);
-      g.lineStyle(2, 0x38bdf8, 0.45); g.strokePoints([{ x: 8, y: 2 }, { x: 36, y: 2 }, { x: 42, y: 8 }, { x: 42, y: 36 }, { x: 36, y: 42 }, { x: 8, y: 42 }, { x: 2, y: 36 }, { x: 2, y: 8 }], true);
-      g.fillStyle(0x050914, 1); g.fillCircle(22, 22, 13);
-      g.lineStyle(1, 0x8fa3c4, 0.4); g.strokeCircle(22, 22, 13);
-    });
     // S2 SUNSET (ambiente): lua creme com halo + brasa quente. Só fundo/ambiente.
     mk('moon', 180, g => {
       // halo radial (creme, sem roxo)
@@ -315,6 +327,8 @@
       g.lineStyle(2, 0xfff6e0, 0.9); g.strokeCircle(90, 90, 48);
       g.lineStyle(3, 0xf5a83d, 0.45);
       g.beginPath(); g.arc(90, 90, 48, Math.PI * 0.15, Math.PI * 0.85, false); g.strokePath();
+      // ONDA 5 (SUNSET/pixel art): contorno preto de 1px lógico por fora da silhueta, sem redesenhar a identidade
+      g.lineStyle(2, 0x000000, 1); g.strokeCircle(90, 90, 50);
     });
     mk('ember', 8, g => {
       // partícula quente 3-5px: halo âmbar + núcleo creme
